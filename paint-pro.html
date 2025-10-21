@@ -1199,23 +1199,17 @@
 
         function startDrawing(e) {
             const pos = getMousePos(e);
-            
-            // Prevenir menú contextual en click derecho
             if (e.button === 2) {
                 e.preventDefault();
                 rightClickHeld = true;
                 return;
             }
-            
-            // Manejar selección y manipulación de figuras con modificadores
-            if (e.button === 0) { // Click izquierdo
+
+            if (e.button === 0) {
                 if (e.ctrlKey) {
-                    // Modo mover
                     const shapeToMove = selectBestShapeAtPosition(pos.x, pos.y);
-                    
                     if (shapeToMove) {
                         shapes.forEach(shape => shape.selected = false);
-                        
                         selectedShape = shapeToMove;
                         selectedShape.selected = true;
                         isMoving = true;
@@ -1227,40 +1221,26 @@
                     }
                     return;
                 } else if (e.shiftKey) {
-                    // Modo rotar
                     const shapeToRotate = selectBestShapeAtPosition(pos.x, pos.y);
-                    
                     if (shapeToRotate) {
                         shapes.forEach(shape => shape.selected = false);
-                        
                         selectedShape = shapeToRotate;
                         selectedShape.selected = true;
                         isRotating = true;
-                        
-                        const centerX = shapeToRotate.type === 'brush' && shapeToRotate.centerX !== undefined ?
-                            shapeToRotate.centerX :
-                            (shapeToRotate.startX + shapeToRotate.endX) / 2;
-                        const centerY = shapeToRotate.type === 'brush' && shapeToRotate.centerY !== undefined ?
-                            shapeToRotate.centerY :
-                            (shapeToRotate.startY + shapeToRotate.endY) / 2;
-                        
+                        const centerX = shapeToRotate.type === 'brush' && shapeToRotate.centerX !== undefined ? shapeToRotate.centerX : (shapeToRotate.startX + shapeToRotate.endX) / 2;
+                        const centerY = shapeToRotate.type === 'brush' && shapeToRotate.centerY !== undefined ? shapeToRotate.centerY : (shapeToRotate.startY + shapeToRotate.endY) / 2;
                         initialAngle = getAngle(centerX, centerY, pos.x, pos.y);
                         canvas.style.cursor = 'grab';
-                        
-                        // Inicializar el ángulo de rotación y mostrar el indicador
                         rotationAngle = (shapeToRotate.rotation || 0) * (180 / Math.PI);
                         updateRotationDisplay();
-                        
                         redrawCanvasWithShapes();
                         showNotification('Figura seleccionada para rotar (mantén Shift + arrastra)');
                     }
                     return;
                 }
             }
-            
-            // Limpiar selecciones previas si no se está manipulando
+
             shapes.forEach(shape => shape.selected = false);
-            
             if (currentTool === 'text') {
                 textPosition = pos;
                 document.getElementById('textModal').style.display = 'flex';
@@ -1292,264 +1272,199 @@
             startX = pos.x;
             startY = pos.y;
             points = [pos];
-
             ctx.globalAlpha = opacity;
 
-            if (currentTool === 'brush' || currentTool === 'pencil' || currentTool === 'eraser' || currentTool === 'spray') {
+            if (['brush', 'pencil', 'eraser', 'spray'].includes(currentTool)) {
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
             }
-
-            if (currentTool === 'polygon' || currentTool === 'curve') {
-                if (e.shiftKey && points.length > 2) {
-                    finishShape();
-                }
-            }
+            saveState();
         }
 
         function draw(e) {
-            const pos = getMousePos(e);
-            
-            // Manejar movimiento de figuras
-            if (isMoving && selectedShape) {
-                const deltaX = pos.x - moveOffsetX;
-                const deltaY = pos.y - moveOffsetY;
-                
-                moveShape(selectedShape, deltaX, deltaY);
-                moveOffsetX = pos.x;
-                moveOffsetY = pos.y;
-                redrawCanvasWithShapes();
-                return;
-            }
-            
-            // Manejar rotación de figuras
-            if (isRotating && selectedShape) {
-                const centerX = selectedShape.type === 'brush' && selectedShape.centerX !== undefined ?
-                    selectedShape.centerX :
-                    (selectedShape.startX + selectedShape.endX) / 2;
-                const centerY = selectedShape.type === 'brush' && selectedShape.centerY !== undefined ?
-                    selectedShape.centerY :
-                    (selectedShape.startY + selectedShape.endY) / 2;
-                
-                const currentAngle = getAngle(centerX, centerY, pos.x, pos.y);
-                const angleChange = currentAngle - initialAngle;
-                
-                rotateShape(selectedShape, angleChange);
-                initialAngle = currentAngle;
-                redrawCanvasWithShapes();
-                return;
-            }
-            
-            if (currentTool === 'select' && selectionStart) {
-                drawSelection(selectionStart, pos);
-            }
-
             if (!isDrawing) return;
+            const pos = getMousePos(e);
 
-            switch(currentTool) {
-                case 'brush':
-                    drawBrush(pos);
-                    break;
-                case 'pencil':
-                    drawPencil(pos);
-                    break;
-                case 'spray':
-                    drawSpray(pos);
-                    break;
-                case 'eraser':
-                    drawEraser(pos);
-                    break;
-                case 'clone':
-                    drawClone(pos);
-                    break;
-                case 'blur':
-                    drawBlur(pos);
-                    break;
+            if (['line', 'rectangle', 'circle', 'triangle', 'star', 'arrow'].includes(currentTool)) {
+                redrawCanvasWithShapes();
+                const tempCtx = canvas.getContext('2d');
+                tempCtx.strokeStyle = currentColor;
+                tempCtx.lineWidth = brushSize;
+                tempCtx.fillStyle = currentColor;
+
+                switch (currentTool) {
+                    case 'line':
+                        drawLine(startX, startY, pos.x, pos.y);
+                        break;
+                    case 'rectangle':
+                        drawRectangle(startX, startY, pos.x, pos.y);
+                        break;
+                    case 'circle':
+                        drawCircle(startX, startY, pos.x, pos.y);
+                        break;
+                    case 'triangle':
+                        drawTriangle(startX, startY, pos.x, pos.y);
+                        break;
+                    case 'star':
+                        drawStar(startX, startY, pos.x, pos.y);
+                        break;
+                    case 'arrow':
+                        drawArrow(startX, startY, pos.x, pos.y);
+                        break;
+                }
+            } else {
+                switch (currentTool) {
+                    case 'brush':
+                        drawBrush(pos);
+                        break;
+                    case 'pencil':
+                        drawPencil(pos);
+                        break;
+                    case 'spray':
+                        drawSpray(pos);
+                        break;
+                    case 'eraser':
+                        drawEraser(pos);
+                        break;
+                    case 'clone':
+                        drawClone(pos);
+                        break;
+                    case 'blur':
+                        drawBlur(pos);
+                        break;
+                }
             }
-            
             applySymmetry(pos);
         }
 
         function stopDrawing(e) {
-            const pos = getMousePos(e);
-            
-            // Manejar click derecho para escalado
-            if (e.button === 2) {
-                rightClickHeld = false;
-                if (selectedShape && isResizing) {
-                    selectedShape.selected = false;
-                    redrawCanvasWithShapes();
-                    isResizing = false;
-                    selectedShape = null;
-                    canvas.style.cursor = 'crosshair';
-                }
-                return;
-            }
-            
-            // Finalizar movimiento de figuras
-            if (isMoving) {
-                if (selectedShape) {
-                    selectedShape.selected = false;
-                    redrawCanvasWithShapes();
-                }
-                isMoving = false;
-                selectedShape = null;
-                canvas.style.cursor = 'crosshair';
-                showNotification('Figura movida');
-                return;
-            }
-            
-            // Finalizar rotación de figuras
-            if (isRotating) {
-                if (selectedShape) {
-                    selectedShape.selected = false;
-                    redrawCanvasWithShapes();
-                }
-                isRotating = false;
-                selectedShape = null;
-                canvas.style.cursor = 'crosshair';
-                hideRotationDisplay(); // Ocultar el indicador de ángulo
-                showNotification('Figura rotada');
-                return;
-            }
-            
             if (!isDrawing) return;
             isDrawing = false;
+            const pos = getMousePos(e);
 
-            ctx.globalAlpha = opacity;
+            let shape = {
+                type: currentTool,
+                startX: startX,
+                startY: startY,
+                endX: pos.x,
+                endY: pos.y,
+                color: currentColor,
+                lineWidth: brushSize,
+                rotation: 0,
+                selected: false
+            };
 
-            // Guardar las figuras creadas en el array shapes
-            switch(currentTool) {
-                case 'line':
-                    restoreState();
-                    drawLine(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'line',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'rectangle':
-                    restoreState();
-                    drawRectangle(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'rectangle',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'circle':
-                    restoreState();
-                    drawCircle(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'circle',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'triangle':
-                    restoreState();
-                    drawTriangle(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'triangle',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'star':
-                    restoreState();
-                    drawStar(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'star',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'arrow':
-                    restoreState();
-                    drawArrow(startX, startY, pos.x, pos.y);
-                    shapes.push({
-                        type: 'arrow',
-                        startX: startX,
-                        startY: startY,
-                        endX: pos.x,
-                        endY: pos.y,
-                        color: currentColor,
-                        lineWidth: brushSize,
-                        selected: false,
-                        rotation: 0
-                    });
-                    break;
-                case 'brush':
-                    if (points && points.length > 0) {
-                        const center = calculateBrushCenter(points);
-                        shapes.push({
-                            type: 'brush',
-                            points: [...points],
-                            centerX: center.x,
-                            centerY: center.y,
-                            color: currentColor,
-                            lineWidth: brushSize,
-                            selected: false,
-                            rotation: 0
-                        });
-                    }
-                    break;
-                case 'pencil':
-                    if (points && points.length > 0) {
-                        const center = calculateBrushCenter(points);
-                        shapes.push({
-                            type: 'pencil',
-                            points: [...points],
-                            centerX: center.x,
-                            centerY: center.y,
-                            color: currentColor,
-                            lineWidth: 1,
-                            selected: false,
-                            rotation: 0
-                        });
-                    }
-                    break;
-                case 'gradient':
-                    restoreState();
-                    drawGradient(startX, startY, pos.x, pos.y);
-                    break;
+            if (['line', 'rectangle', 'circle', 'triangle', 'star', 'arrow'].includes(currentTool)) {
+                shapes.push(shape);
+            } else if (['brush', 'pencil'].includes(currentTool) && points.length > 0) {
+                const center = calculateBrushCenter(points);
+                shapes.push({
+                    type: currentTool,
+                    points: [...points],
+                    centerX: center.x,
+                    centerY: center.y,
+                    color: currentColor,
+                    lineWidth: currentTool === 'pencil' ? 1 : brushSize,
+                    rotation: 0,
+                    selected: false
+                });
             }
 
-            ctx.globalAlpha = 1.0;
+            redrawCanvasWithShapes();
             saveState();
             updateMinimap();
             updateFileSize();
+        }
+
+        function redrawCanvasWithShapes() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            shapes.forEach(shape => {
+                ctx.strokeStyle = shape.color;
+                ctx.lineWidth = shape.lineWidth;
+                ctx.fillStyle = shape.color;
+                ctx.globalAlpha = shape.opacity || 1;
+
+                const style = {
+                    fill: shape.fill || false,
+                    selected: shape.selected
+                };
+
+                switch (shape.type) {
+                    case 'line':
+                        drawLine(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation);
+                        break;
+                    case 'rectangle':
+                        drawRectangle(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation, style);
+                        break;
+                    case 'circle':
+                        drawCircle(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation, style);
+                        break;
+                    case 'triangle':
+                        drawTriangle(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation, style);
+                        break;
+                    case 'star':
+                        drawStar(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation, style);
+                        break;
+                    case 'arrow':
+                        drawArrow(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation);
+                        break;
+                    case 'brush':
+                    case 'pencil':
+                        drawBrushStroke(shape);
+                        break;
+                }
+
+                if (shape.selected) {
+                    highlightShape(shape);
+                }
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function drawBrushStroke(shape) {
+            if (!shape.points || shape.points.length === 0) return;
+            ctx.save();
+            ctx.strokeStyle = shape.color;
+            ctx.lineWidth = shape.lineWidth;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (shape.rotation) {
+                ctx.translate(shape.centerX, shape.centerY);
+                ctx.rotate(shape.rotation);
+                ctx.translate(-shape.centerX, -shape.centerY);
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function highlightShape(shape) {
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+
+            switch (shape.type) {
+                case 'rectangle':
+                    drawRectangle(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation);
+                    break;
+                case 'circle':
+                    drawCircle(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation);
+                    break;
+                case 'line':
+                    drawLine(shape.startX, shape.startY, shape.endX, shape.endY, shape.rotation);
+                    break;
+                // Add other shapes if needed
+            }
+            ctx.setLineDash([]);
         }
 
         function drawBrush(pos) {
@@ -3230,8 +3145,35 @@
             }, 3000);
         }
 
+        function updateGrid() {
+            const gridOverlay = document.getElementById('gridOverlay');
+            const canvasWidth = canvas.width * zoom;
+            const canvasHeight = canvas.height * zoom;
+
+            gridOverlay.style.width = canvasWidth + 'px';
+            gridOverlay.style.height = canvasHeight + 'px';
+
+            const actualGridSize = gridSize * zoom;
+            gridOverlay.style.backgroundImage = `
+                linear-gradient(to right, rgba(20, 255, 236, 0.4) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(20, 255, 236, 0.4) 1px, transparent 1px)
+            `;
+            gridOverlay.style.backgroundSize = `${actualGridSize}px ${actualGridSize}px`;
+        }
+
         function toggleGrid() {
             showGrid = !showGrid;
+            const gridBtn = document.getElementById('gridBtn');
+            const gridOverlay = document.getElementById('gridOverlay');
+            
+            if (showGrid) {
+                gridOverlay.style.display = 'block';
+                updateGrid();
+                gridBtn.classList.add('active');
+            } else {
+                gridOverlay.style.display = 'none';
+                gridBtn.classList.remove('active');
+            }
             showNotification(showGrid ? 'Cuadrícula activada' : 'Cuadrícula desactivada');
         }
 
