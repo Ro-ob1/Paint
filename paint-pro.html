@@ -554,6 +554,134 @@
                 opacity: 1;
             }
         }
+
+        /* Estilos para reglas y cuadrícula */
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .ruler {
+            position: absolute;
+            background: #2b2b2b;
+            color: #fff;
+            font-size: 10px;
+            font-family: monospace;
+            z-index: 5;
+            border: 1px solid #555;
+        }
+
+        .ruler-horizontal {
+            left: 25px;
+            top: 0;
+            height: 25px;
+            width: 100%;
+            background: linear-gradient(to bottom, #2b2b2b 0%, #1e1e1e 100%);
+            border-bottom: 1px solid #14FFEC;
+            overflow: hidden;
+        }
+
+        .ruler-vertical {
+            left: 0;
+            top: 25px;
+            width: 25px;
+            height: 100%;
+            background: linear-gradient(to right, #2b2b2b 0%, #1e1e1e 100%);
+            border-right: 1px solid #14FFEC;
+            overflow: hidden;
+        }
+
+        .ruler-corner {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 25px;
+            height: 25px;
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-bottom-color: #14FFEC;
+            border-right-color: #14FFEC;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            pointer-events: none;
+            z-index: 1;
+            background-image: 
+                linear-gradient(to right, rgba(20, 255, 236, 0.4) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(20, 255, 236, 0.4) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .ruler-tick {
+            position: absolute;
+            background: #555;
+            color: #14FFEC;
+            font-size: 8px;
+            text-align: center;
+        }
+
+        .ruler-horizontal .ruler-tick {
+            border-left: 1px solid #14FFEC;
+            height: 8px;
+            width: 1px;
+            top: 17px;
+        }
+
+        .ruler-vertical .ruler-tick {
+            border-top: 1px solid #14FFEC;
+            width: 8px;
+            height: 1px;
+            left: 17px;
+        }
+
+        .ruler-tick-major {
+            background: transparent;
+            color: #14FFEC;
+            font-weight: bold;
+            font-size: 9px;
+            line-height: 1;
+        }
+
+        .ruler-horizontal .ruler-tick-major {
+            height: 25px;
+            top: 0;
+            padding-left: 2px;
+            padding-top: 2px;
+            min-width: 20px;
+            border-left: 2px solid #14FFEC;
+        }
+
+        .ruler-vertical .ruler-tick-major {
+            width: 25px;
+            left: 0;
+            padding-top: 2px;
+            padding-left: 2px;
+            min-height: 15px;
+            border-top: 2px solid #14FFEC;
+            writing-mode: horizontal-tb;
+            transform: rotate(-90deg);
+            transform-origin: left top;
+        }
+
+        .ruler-tick-minor {
+            background: #666;
+        }
+
+        .ruler-number {
+            position: absolute;
+            color: #14FFEC;
+            font-size: 9px;
+            text-align: center;
+        }
+
+        .canvas-with-rulers {
+            position: relative;
+            margin-left: 25px;
+            margin-top: 25px;
+        }
     </style>
 </head>
 <body>
@@ -661,6 +789,12 @@
             <button class="tool-btn" onclick="zoomOut()" title="Alejar">-</button>
             <button class="tool-btn" onclick="resetZoom()" title="Restablecer">⊙</button>
         </div>
+
+        <div class="tool-group">
+            <label>Vista:</label>
+            <button class="tool-btn" onclick="toggleRulers()" id="rulersBtn" title="Mostrar/Ocultar Reglas">📏</button>
+            <button class="tool-btn" onclick="toggleGrid()" id="gridBtn" title="Mostrar/Ocultar Cuadrícula">⊞</button>
+        </div>
     </div>
 
     <!-- Main Container -->
@@ -732,7 +866,13 @@
         <!-- Canvas Area -->
         <div class="canvas-area" id="canvasArea">
             <div class="spinner" id="spinner"></div>
-            <canvas id="canvas" width="1200" height="800"></canvas>
+            <div class="canvas-container" id="canvasContainer">
+                <div class="ruler-corner" id="rulerCorner"></div>
+                <div class="ruler ruler-horizontal" id="rulerHorizontal"></div>
+                <div class="ruler ruler-vertical" id="rulerVertical"></div>
+                <div class="grid-overlay" id="gridOverlay"></div>
+                <canvas id="canvas" width="1200" height="800"></canvas>
+            </div>
         </div>
 
         <!-- Right Sidebar - Properties -->
@@ -823,6 +963,22 @@
                     <canvas id="minimapCanvas" class="minimap-canvas"></canvas>
                 </div>
             </div>
+
+            <!-- Shape Manipulation Info -->
+            <div class="panel">
+                <div class="panel-title">🔧 Manipulación de Figuras</div>
+                <div class="shortcuts-help">
+                    <strong>🖱️ Controles:</strong><br>
+                    • <strong>Ctrl + Click:</strong> Mover figuras<br>
+                    • <strong>Shift + Click:</strong> Rotar figuras<br>
+                    • <strong>Click derecho + Rueda:</strong> Escalar<br><br>
+                    
+                    <strong>💡 Consejos:</strong><br>
+                    • Las figuras seleccionadas se resaltan en rojo<br>
+                    • Si hay figuras superpuestas, haz clic varias veces para cambiar entre ellas<br>
+                    • Mantén presionada la tecla mientras arrastras
+                </div>
+            </div>
         </div>
     </div>
 
@@ -834,6 +990,8 @@
             <span style="margin: 0 10px;">|</span>
             <span id="coordinates">X: 0, Y: 0</span>
             <span style="margin: 0 10px;">|</span>
+            <span id="rotationInfo" style="display: none;">Rotación: <span id="rotationAngle">0°</span></span>
+            <span id="rotationSeparator" style="margin: 0 10px; display: none;">|</span>
             <span id="fileSize">Tamaño: 0 KB</span>
         </div>
     </div>
@@ -914,6 +1072,9 @@
         let symmetryMode = 'none';
         let gradientType = 'linear';
         let showGrid = false;
+        let showRulers = false;
+        let rulerUnit = 10; // pixeles por unidad de medida
+        let gridSize = 20; // tamaño de la cuadrícula
         let layers = [{ data: null, visible: true, opacity: 1, name: 'Capa 1' }];
         let currentLayer = 0;
         let textPosition = null;
@@ -923,6 +1084,20 @@
         let points = [];
         let curvePoints = [];
         let cloneSource = null;
+        
+        // Variables para selección y manipulación de figuras
+        let shapes = [];
+        let selectedShape = null;
+        let isMoving = false;
+        let isResizing = false;
+        let isRotating = false;
+        let moveOffsetX = 0;
+        let moveOffsetY = 0;
+        let lastClickedShapes = [];
+        let initialDistance = 0;
+        let initialAngle = 0;
+        let rightClickHeld = false;
+        let rotationAngle = 0; // Para mostrar el ángulo actual de rotación
         
         // Paleta de colores predefinida
         const defaultPalette = [
@@ -942,6 +1117,12 @@
             updateMinimap();
             updateGradientPreview();
             
+            // Inicializar reglas y cuadrícula (ocultas por defecto)
+            document.getElementById('rulerHorizontal').style.display = 'none';
+            document.getElementById('rulerVertical').style.display = 'none';
+            document.getElementById('rulerCorner').style.display = 'none';
+            document.getElementById('gridOverlay').style.display = 'none';
+            
             // Event listeners del canvas
             canvas.addEventListener('mousedown', startDrawing);
             canvas.addEventListener('mousemove', draw);
@@ -949,6 +1130,68 @@
             canvas.addEventListener('mouseout', stopDrawing);
             canvas.addEventListener('mousemove', updateCoordinates);
             canvas.addEventListener('wheel', handleWheel);
+            canvas.addEventListener('contextmenu', function(e) {
+                e.preventDefault(); // Prevenir menú contextual
+            });
+            
+            // Event listeners globales para el documento
+            document.addEventListener('mouseup', function(e) {
+                if (isMoving || isRotating) {
+                    if (selectedShape) {
+                        selectedShape.selected = false;
+                        redrawCanvasWithShapes();
+                    }
+                    
+                    if (isRotating) {
+                        hideRotationDisplay(); // Ocultar indicador al terminar rotación
+                    }
+                    
+                    isMoving = false;
+                    isRotating = false;
+                    selectedShape = null;
+                    canvas.style.cursor = 'crosshair';
+                }
+                if (e.button === 2) {
+                    rightClickHeld = false;
+                    if (selectedShape && isResizing) {
+                        selectedShape.selected = false;
+                        redrawCanvasWithShapes();
+                        isResizing = false;
+                        selectedShape = null;
+                        canvas.style.cursor = 'crosshair';
+                    }
+                }
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if ((isMoving || isRotating) && selectedShape) {
+                    const pos = getMousePos(e);
+                    
+                    if (isMoving) {
+                        const deltaX = pos.x - moveOffsetX;
+                        const deltaY = pos.y - moveOffsetY;
+                        
+                        moveShape(selectedShape, deltaX, deltaY);
+                        moveOffsetX = pos.x;
+                        moveOffsetY = pos.y;
+                    } else if (isRotating) {
+                        const centerX = selectedShape.type === 'brush' && selectedShape.centerX !== undefined ?
+                            selectedShape.centerX :
+                            (selectedShape.startX + selectedShape.endX) / 2;
+                        const centerY = selectedShape.type === 'brush' && selectedShape.centerY !== undefined ?
+                            selectedShape.centerY :
+                            (selectedShape.startY + selectedShape.endY) / 2;
+                        
+                        const currentAngle = getAngle(centerX, centerY, pos.x, pos.y);
+                        const angleChange = currentAngle - initialAngle;
+                        
+                        rotateShape(selectedShape, angleChange);
+                        initialAngle = currentAngle;
+                    }
+                    
+                    redrawCanvasWithShapes();
+                }
+            });
             
             // Actualizar tamaño de archivo
             updateFileSize();
@@ -956,6 +1199,67 @@
 
         function startDrawing(e) {
             const pos = getMousePos(e);
+            
+            // Prevenir menú contextual en click derecho
+            if (e.button === 2) {
+                e.preventDefault();
+                rightClickHeld = true;
+                return;
+            }
+            
+            // Manejar selección y manipulación de figuras con modificadores
+            if (e.button === 0) { // Click izquierdo
+                if (e.ctrlKey) {
+                    // Modo mover
+                    const shapeToMove = selectBestShapeAtPosition(pos.x, pos.y);
+                    
+                    if (shapeToMove) {
+                        shapes.forEach(shape => shape.selected = false);
+                        
+                        selectedShape = shapeToMove;
+                        selectedShape.selected = true;
+                        isMoving = true;
+                        moveOffsetX = pos.x;
+                        moveOffsetY = pos.y;
+                        canvas.style.cursor = 'move';
+                        redrawCanvasWithShapes();
+                        showNotification('Figura seleccionada para mover (mantén Ctrl + arrastra)');
+                    }
+                    return;
+                } else if (e.shiftKey) {
+                    // Modo rotar
+                    const shapeToRotate = selectBestShapeAtPosition(pos.x, pos.y);
+                    
+                    if (shapeToRotate) {
+                        shapes.forEach(shape => shape.selected = false);
+                        
+                        selectedShape = shapeToRotate;
+                        selectedShape.selected = true;
+                        isRotating = true;
+                        
+                        const centerX = shapeToRotate.type === 'brush' && shapeToRotate.centerX !== undefined ?
+                            shapeToRotate.centerX :
+                            (shapeToRotate.startX + shapeToRotate.endX) / 2;
+                        const centerY = shapeToRotate.type === 'brush' && shapeToRotate.centerY !== undefined ?
+                            shapeToRotate.centerY :
+                            (shapeToRotate.startY + shapeToRotate.endY) / 2;
+                        
+                        initialAngle = getAngle(centerX, centerY, pos.x, pos.y);
+                        canvas.style.cursor = 'grab';
+                        
+                        // Inicializar el ángulo de rotación y mostrar el indicador
+                        rotationAngle = (shapeToRotate.rotation || 0) * (180 / Math.PI);
+                        updateRotationDisplay();
+                        
+                        redrawCanvasWithShapes();
+                        showNotification('Figura seleccionada para rotar (mantén Shift + arrastra)');
+                    }
+                    return;
+                }
+            }
+            
+            // Limpiar selecciones previas si no se está manipulando
+            shapes.forEach(shape => shape.selected = false);
             
             if (currentTool === 'text') {
                 textPosition = pos;
@@ -1006,6 +1310,36 @@
         function draw(e) {
             const pos = getMousePos(e);
             
+            // Manejar movimiento de figuras
+            if (isMoving && selectedShape) {
+                const deltaX = pos.x - moveOffsetX;
+                const deltaY = pos.y - moveOffsetY;
+                
+                moveShape(selectedShape, deltaX, deltaY);
+                moveOffsetX = pos.x;
+                moveOffsetY = pos.y;
+                redrawCanvasWithShapes();
+                return;
+            }
+            
+            // Manejar rotación de figuras
+            if (isRotating && selectedShape) {
+                const centerX = selectedShape.type === 'brush' && selectedShape.centerX !== undefined ?
+                    selectedShape.centerX :
+                    (selectedShape.startX + selectedShape.endX) / 2;
+                const centerY = selectedShape.type === 'brush' && selectedShape.centerY !== undefined ?
+                    selectedShape.centerY :
+                    (selectedShape.startY + selectedShape.endY) / 2;
+                
+                const currentAngle = getAngle(centerX, centerY, pos.x, pos.y);
+                const angleChange = currentAngle - initialAngle;
+                
+                rotateShape(selectedShape, angleChange);
+                initialAngle = currentAngle;
+                redrawCanvasWithShapes();
+                return;
+            }
+            
             if (currentTool === 'select' && selectionStart) {
                 drawSelection(selectionStart, pos);
             }
@@ -1037,37 +1371,174 @@
         }
 
         function stopDrawing(e) {
+            const pos = getMousePos(e);
+            
+            // Manejar click derecho para escalado
+            if (e.button === 2) {
+                rightClickHeld = false;
+                if (selectedShape && isResizing) {
+                    selectedShape.selected = false;
+                    redrawCanvasWithShapes();
+                    isResizing = false;
+                    selectedShape = null;
+                    canvas.style.cursor = 'crosshair';
+                }
+                return;
+            }
+            
+            // Finalizar movimiento de figuras
+            if (isMoving) {
+                if (selectedShape) {
+                    selectedShape.selected = false;
+                    redrawCanvasWithShapes();
+                }
+                isMoving = false;
+                selectedShape = null;
+                canvas.style.cursor = 'crosshair';
+                showNotification('Figura movida');
+                return;
+            }
+            
+            // Finalizar rotación de figuras
+            if (isRotating) {
+                if (selectedShape) {
+                    selectedShape.selected = false;
+                    redrawCanvasWithShapes();
+                }
+                isRotating = false;
+                selectedShape = null;
+                canvas.style.cursor = 'crosshair';
+                hideRotationDisplay(); // Ocultar el indicador de ángulo
+                showNotification('Figura rotada');
+                return;
+            }
+            
             if (!isDrawing) return;
             isDrawing = false;
 
-            const pos = getMousePos(e);
-
             ctx.globalAlpha = opacity;
 
+            // Guardar las figuras creadas en el array shapes
             switch(currentTool) {
                 case 'line':
                     restoreState();
                     drawLine(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'line',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
                     break;
                 case 'rectangle':
                     restoreState();
                     drawRectangle(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'rectangle',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
                     break;
                 case 'circle':
                     restoreState();
                     drawCircle(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'circle',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
                     break;
                 case 'triangle':
                     restoreState();
                     drawTriangle(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'triangle',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
                     break;
                 case 'star':
                     restoreState();
                     drawStar(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'star',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
                     break;
                 case 'arrow':
                     restoreState();
                     drawArrow(startX, startY, pos.x, pos.y);
+                    shapes.push({
+                        type: 'arrow',
+                        startX: startX,
+                        startY: startY,
+                        endX: pos.x,
+                        endY: pos.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
+                    break;
+                case 'brush':
+                    if (points && points.length > 0) {
+                        const center = calculateBrushCenter(points);
+                        shapes.push({
+                            type: 'brush',
+                            points: [...points],
+                            centerX: center.x,
+                            centerY: center.y,
+                            color: currentColor,
+                            lineWidth: brushSize,
+                            selected: false,
+                            rotation: 0
+                        });
+                    }
+                    break;
+                case 'pencil':
+                    if (points && points.length > 0) {
+                        const center = calculateBrushCenter(points);
+                        shapes.push({
+                            type: 'pencil',
+                            points: [...points],
+                            centerX: center.x,
+                            centerY: center.y,
+                            color: currentColor,
+                            lineWidth: 1,
+                            selected: false,
+                            rotation: 0
+                        });
+                    }
                     break;
                 case 'gradient':
                     restoreState();
@@ -1096,6 +1567,9 @@
             
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
+            
+            // Agregar punto al trazo actual
+            points.push({x: pos.x, y: pos.y});
         }
 
         function drawPencil(pos) {
@@ -1104,6 +1578,9 @@
             ctx.lineCap = 'square';
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
+            
+            // Agregar punto al trazo actual
+            points.push({x: pos.x, y: pos.y});
         }
 
         function drawSpray(pos) {
@@ -1125,75 +1602,143 @@
             ctx.stroke();
         }
 
-        function drawLine(x1, y1, x2, y2) {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
-            ctx.lineCap = 'round';
+        function drawLine(x1, y1, x2, y2, rotation = 0) {
+            ctx.save();
+            if (rotation !== 0) {
+                const centerX = (x1 + x2) / 2;
+                const centerY = (y1 + y2) / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
             ctx.stroke();
+            ctx.restore();
         }
 
-        function drawRectangle(x1, y1, x2, y2) {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
-            
-            const width = x2 - x1;
-            const height = y2 - y1;
-            
-            if (fillStyle === 'solid') {
-                ctx.fillStyle = currentColor;
-                ctx.fillRect(x1, y1, width, height);
+        function drawRectangle(x1, y1, x2, y2, rotation = 0, style = {}) {
+            ctx.save();
+            if (rotation !== 0) {
+                const centerX = (x1 + x2) / 2;
+                const centerY = (y1 + y2) / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
             }
-            ctx.strokeRect(x1, y1, width, height);
-        }
-
-        function drawCircle(x1, y1, x2, y2) {
-            const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
+            const x = Math.min(x1, x2);
+            const y = Math.min(y1, y2);
+            const width = Math.abs(x2 - x1);
+            const height = Math.abs(y2 - y1);
+            
             ctx.beginPath();
-            ctx.arc(x1, y1, radius, 0, 2 * Math.PI);
-            
-            if (fillStyle === 'solid') {
-                ctx.fillStyle = currentColor;
-                ctx.fill();
-            }
+            ctx.rect(x, y, width, height);
+            if (style.fill) ctx.fill();
             ctx.stroke();
+            ctx.restore();
         }
 
-        function drawTriangle(x1, y1, x2, y2) {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
+        function drawCircle(x1, y1, x2, y2, rotation = 0, style = {}) {
+            // Para círculos, mantener proporción 1:1
+            const width = Math.abs(x2 - x1);
+            const height = Math.abs(y2 - y1);
+            const size = Math.min(width, height);
+            const dirX = x2 >= x1 ? 1 : -1;
+            const dirY = y2 >= y1 ? 1 : -1;
+            const newX2 = x1 + dirX * size;
+            const newY2 = y1 + dirY * size;
+            
+            const centerX = (x1 + newX2) / 2;
+            const centerY = (y1 + newY2) / 2;
+            const radius = size / 2;
+            
+            ctx.save();
+            if (rotation !== 0) {
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
             ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x1 - (x2 - x1), y2);
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            if (style.fill) ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawEllipse(x1, y1, x2, y2, rotation = 0, style = {}) {
+            const centerX = (x1 + x2) / 2;
+            const centerY = (y1 + y2) / 2;
+            const radiusX = Math.abs((x2 - x1) / 2);
+            const radiusY = Math.abs((y2 - y1) / 2);
+            
+            ctx.save();
+            if (rotation !== 0) {
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
+            ctx.beginPath();
+            if (ctx.ellipse) {
+                ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            } else {
+                // Fallback para navegadores que no soportan ellipse
+                ctx.scale(1, radiusY/radiusX);
+                ctx.arc(centerX, centerY * radiusX/radiusY, radiusX, 0, 2 * Math.PI);
+            }
+            if (style.fill) ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawTriangle(x1, y1, x2, y2, rotation = 0, style = {}) {
+            const left = Math.min(x1, x2);
+            const right = Math.max(x1, x2);
+            const top = Math.min(y1, y2);
+            const bottom = Math.max(y1, y2);
+            const centerX = (left + right) / 2;
+            
+            ctx.save();
+            if (rotation !== 0) {
+                const cX = (x1 + x2) / 2;
+                const cY = (y1 + y2) / 2;
+                ctx.translate(cX, cY);
+                ctx.rotate(rotation);
+                ctx.translate(-cX, -cY);
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, top);     // Punta superior
+            ctx.lineTo(right, bottom);    // Esquina inferior derecha
+            ctx.lineTo(left, bottom);     // Esquina inferior izquierda
             ctx.closePath();
             
-            if (fillStyle === 'solid') {
-                ctx.fillStyle = currentColor;
-                ctx.fill();
-            }
+            if (style.fill) ctx.fill();
             ctx.stroke();
+            ctx.restore();
         }
 
-        function drawStar(x1, y1, x2, y2) {
-            const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        function drawStar(x1, y1, x2, y2, rotation = 0, style = {}) {
+            const centerX = (x1 + x2) / 2;
+            const centerY = (y1 + y2) / 2;
+            const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)) / 2;
             const spikes = 5;
             const outerRadius = radius;
             const innerRadius = radius / 2;
             
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
-            ctx.beginPath();
+            ctx.save();
+            if (rotation !== 0) {
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
             
+            ctx.beginPath();
             for (let i = 0; i < spikes * 2; i++) {
                 const angle = (Math.PI / spikes) * i;
                 const r = i % 2 === 0 ? outerRadius : innerRadius;
-                const x = x1 + Math.cos(angle - Math.PI / 2) * r;
-                const y = y1 + Math.sin(angle - Math.PI / 2) * r;
+                const x = centerX + Math.cos(angle - Math.PI / 2) * r;
+                const y = centerY + Math.sin(angle - Math.PI / 2) * r;
                 
                 if (i === 0) {
                     ctx.moveTo(x, y);
@@ -1201,14 +1746,41 @@
                     ctx.lineTo(x, y);
                 }
             }
-            
             ctx.closePath();
             
-            if (fillStyle === 'solid') {
-                ctx.fillStyle = currentColor;
-                ctx.fill();
-            }
+            if (style.fill) ctx.fill();
             ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawArrow(x1, y1, x2, y2, rotation = 0) {
+            ctx.save();
+            if (rotation !== 0) {
+                const centerX = (x1 + x2) / 2;
+                const centerY = (y1 + y2) / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
+            
+            const headLength = 20;
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            
+            // Línea principal
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            
+            // Punta de la flecha
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
+            ctx.stroke();
+            
+            ctx.restore();
         }
 
         function drawArrow(x1, y1, x2, y2) {
@@ -1378,6 +1950,424 @@
                 g: parseInt(result[2], 16),
                 b: parseInt(result[3], 16)
             } : null;
+        }
+
+        // Funciones para selección y manipulación de figuras
+        function getDistanceToShape(x, y, shape) {
+            switch (shape.type) {
+                case 'rectangle':
+                    const rectCenterX = (shape.startX + shape.endX) / 2;
+                    const rectCenterY = (shape.startY + shape.endY) / 2;
+                    const rectWidth = Math.abs(shape.endX - shape.startX);
+                    const rectHeight = Math.abs(shape.endY - shape.startY);
+                    
+                    const rectDx = Math.max(0, Math.abs(x - rectCenterX) - rectWidth / 2);
+                    const rectDy = Math.max(0, Math.abs(y - rectCenterY) - rectHeight / 2);
+                    return Math.sqrt(rectDx * rectDx + rectDy * rectDy);
+                
+                case 'circle':
+                    // Para círculos, usar el radio calculado desde el centro
+                    const circleCenterX = (shape.startX + shape.endX) / 2;
+                    const circleCenterY = (shape.startY + shape.endY) / 2;
+                    const circleRadius = Math.min(Math.abs(shape.endX - shape.startX), Math.abs(shape.endY - shape.startY)) / 2;
+                    const circleCenterDistance = Math.sqrt(Math.pow(x - circleCenterX, 2) + Math.pow(y - circleCenterY, 2));
+                    return Math.abs(circleCenterDistance - circleRadius);
+                
+                case 'ellipse':
+                    // Para elipses, aproximación usando distancia al centro ponderada
+                    const ellipseCenterX = (shape.startX + shape.endX) / 2;
+                    const ellipseCenterY = (shape.startY + shape.endY) / 2;
+                    const radiusX = Math.abs((shape.endX - shape.startX) / 2);
+                    const radiusY = Math.abs((shape.endY - shape.startY) / 2);
+                    if (radiusX === 0 || radiusY === 0) return Infinity;
+                    const ellipseVal = Math.sqrt(Math.pow((x - ellipseCenterX) / radiusX, 2) + Math.pow((y - ellipseCenterY) / radiusY, 2));
+                    return Math.abs(ellipseVal - 1) * Math.min(radiusX, radiusY);
+                
+                case 'line':
+                case 'arrow':
+                    const lineDx = shape.endX - shape.startX;
+                    const lineDy = shape.endY - shape.startY;
+                    const length = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
+                    
+                    if (length === 0) return Math.sqrt(Math.pow(x - shape.startX, 2) + Math.pow(y - shape.startY, 2));
+                    
+                    const t = Math.max(0, Math.min(1, ((x - shape.startX) * lineDx + (y - shape.startY) * lineDy) / (length * length)));
+                    const projX = shape.startX + t * lineDx;
+                    const projY = shape.startY + t * lineDy;
+                    return Math.sqrt((x - projX) * (x - projX) + (y - projY) * (y - projY));
+                
+                case 'triangle':
+                case 'star':
+                    // Para triángulos y estrellas, usar distancia al centro como aproximación
+                    const triCenterX = (shape.startX + shape.endX) / 2;
+                    const triCenterY = (shape.startY + shape.endY) / 2;
+                    return Math.sqrt(Math.pow(x - triCenterX, 2) + Math.pow(y - triCenterY, 2));
+                
+                case 'brush':
+                case 'pencil':
+                    if (!shape.points || shape.points.length === 0) return Infinity;
+                    
+                    let minDistance = Infinity;
+                    for (let i = 0; i < shape.points.length - 1; i++) {
+                        const point1 = shape.points[i];
+                        const point2 = shape.points[i + 1];
+                        
+                        const segmentDx = point2.x - point1.x;
+                        const segmentDy = point2.y - point1.y;
+                        const segmentLength = Math.sqrt(segmentDx * segmentDx + segmentDy * segmentDy);
+                        
+                        if (segmentLength === 0) continue;
+                        
+                        const segmentT = Math.max(0, Math.min(1, ((x - point1.x) * segmentDx + (y - point1.y) * segmentDy) / (segmentLength * segmentLength)));
+                        const projX = point1.x + segmentT * segmentDx;
+                        const projY = point1.y + segmentT * segmentDy;
+                        const distance = Math.sqrt((x - projX) * (x - projX) + (y - projY) * (y - projY));
+                        
+                        minDistance = Math.min(minDistance, distance);
+                    }
+                    return minDistance;
+            }
+            return Infinity;
+        }
+
+        function isPointInShape(x, y, shape) {
+            const tolerance = 12; // Reducido para mayor precisión
+            return getDistanceToRotatedShape(x, y, shape) <= tolerance;
+        }
+
+        function getShapesUnderCursor(x, y) {
+            // Ordenar por distancia (más cercano primero)
+            return shapes.filter(shape => isPointInShape(x, y, shape))
+                         .sort((a, b) => getDistanceToRotatedShape(x, y, a) - getDistanceToRotatedShape(x, y, b));
+        }
+
+        function selectBestShapeAtPosition(x, y) {
+            const shapesAtPosition = getShapesUnderCursor(x, y);
+            
+            if (shapesAtPosition.length === 0) return null;
+            
+            // Si hay figuras superpuestas, buscar la siguiente en la lista
+            if (shapesAtPosition.length === 1) {
+                lastClickedShapes = [shapesAtPosition[0]];
+                return shapesAtPosition[0];
+            }
+            
+            // Rotar entre las figuras en la misma posición
+            let currentIndex = -1;
+            if (lastClickedShapes.length > 0) {
+                currentIndex = shapesAtPosition.indexOf(lastClickedShapes[lastClickedShapes.length - 1]);
+            }
+            
+            const nextIndex = (currentIndex + 1) % shapesAtPosition.length;
+            const selectedShape = shapesAtPosition[nextIndex];
+            
+            lastClickedShapes = [selectedShape];
+            
+            return selectedShape;
+        }
+
+        function moveShape(shape, deltaX, deltaY) {
+            switch (shape.type) {
+                case 'line':
+                case 'arrow':
+                case 'rectangle':
+                case 'circle':
+                case 'triangle':
+                case 'star':
+                case 'ellipse':
+                    shape.startX += deltaX;
+                    shape.startY += deltaY;
+                    shape.endX += deltaX;
+                    shape.endY += deltaY;
+                    break;
+                case 'brush':
+                case 'pencil':
+                    if (shape.points) {
+                        shape.points.forEach(point => {
+                            point.x += deltaX;
+                            point.y += deltaY;
+                        });
+                        if (shape.centerX !== undefined) {
+                            shape.centerX += deltaX;
+                            shape.centerY += deltaY;
+                        }
+                    }
+                    break;
+                case 'text':
+                    shape.x += deltaX;
+                    shape.y += deltaY;
+                    break;
+            }
+        }
+
+        function resizeShape(shape, scaleFactor) {
+            const centerX = shape.type === 'brush' && shape.centerX !== undefined ?
+                shape.centerX :
+                (shape.startX + shape.endX) / 2;
+            const centerY = shape.type === 'brush' && shape.centerY !== undefined ?
+                shape.centerY :
+                (shape.startY + shape.endY) / 2;
+            
+            switch (shape.type) {
+                case 'line':
+                case 'arrow':
+                case 'rectangle':
+                case 'circle':
+                case 'triangle':
+                case 'star':
+                case 'ellipse':
+                    const halfWidth = (shape.endX - shape.startX) / 2;
+                    const halfHeight = (shape.endY - shape.startY) / 2;
+                    
+                    shape.startX = centerX - halfWidth * scaleFactor;
+                    shape.startY = centerY - halfHeight * scaleFactor;
+                    shape.endX = centerX + halfWidth * scaleFactor;
+                    shape.endY = centerY + halfHeight * scaleFactor;
+                    break;
+                case 'brush':
+                case 'pencil':
+                    if (shape.points) {
+                        shape.points.forEach(point => {
+                            const dx = point.x - centerX;
+                            const dy = point.y - centerY;
+                            point.x = centerX + dx * scaleFactor;
+                            point.y = centerY + dy * scaleFactor;
+                        });
+                    }
+                    break;
+            }
+        }
+
+        function rotateShape(shape, angleChange) {
+            // Acumular el ángulo de rotación (mantener la geometría original)
+            shape.rotation = (shape.rotation || 0) + angleChange;
+            
+            // Normalizar el ángulo entre -π y π
+            while (shape.rotation > Math.PI) {
+                shape.rotation -= 2 * Math.PI;
+            }
+            while (shape.rotation < -Math.PI) {
+                shape.rotation += 2 * Math.PI;
+            }
+            
+            // Actualizar la visualización del ángulo
+            rotationAngle = shape.rotation * (180 / Math.PI); // Convertir a grados
+            updateRotationDisplay();
+            
+            // NO modificar los puntos físicamente - la rotación se aplica solo durante el renderizado
+            // Esto permite que las figuras mantengan sus coordenadas originales para futuras manipulaciones
+        }
+
+        function calculateBrushCenter(points) {
+            let sumX = 0, sumY = 0;
+            points.forEach(point => {
+                sumX += point.x;
+                sumY += point.y;
+            });
+            return {
+                x: sumX / points.length,
+                y: sumY / points.length
+            };
+        }
+
+        function getDistance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function getAngle(x1, y1, x2, y2) {
+            return Math.atan2(y2 - y1, x2 - x1);
+        }
+
+        // Función helper para rotar un punto alrededor de un centro
+        function rotatePoint(x, y, centerX, centerY, angle) {
+            const cos = Math.cos(-angle); // Negativo para rotación inversa
+            const sin = Math.sin(-angle);
+            const dx = x - centerX;
+            const dy = y - centerY;
+            return {
+                x: centerX + (dx * cos - dy * sin),
+                y: centerY + (dx * sin + dy * cos)
+            };
+        }
+
+        // Función mejorada para detectar distancia considerando rotación
+        function getDistanceToRotatedShape(x, y, shape) {
+            const rotation = shape.rotation || 0;
+            
+            // Si no hay rotación, usar la función normal
+            if (Math.abs(rotation) < 0.001) {
+                return getDistanceToShape(x, y, shape);
+            }
+            
+            // Calcular el centro de rotación
+            let centerX, centerY;
+            if (shape.type === 'brush' || shape.type === 'pencil') {
+                centerX = shape.centerX || 0;
+                centerY = shape.centerY || 0;
+            } else if (shape.type === 'text') {
+                centerX = shape.x;
+                centerY = shape.y;
+            } else {
+                centerX = (shape.startX + shape.endX) / 2;
+                centerY = (shape.startY + shape.endY) / 2;
+            }
+            
+            // Rotar el punto de consulta en dirección opuesta
+            const rotatedPoint = rotatePoint(x, y, centerX, centerY, rotation);
+            
+            // Usar la función normal con el punto rotado
+            return getDistanceToShape(rotatedPoint.x, rotatedPoint.y, shape);
+        }
+
+        function updateRotationDisplay() {
+            const rotationInfo = document.getElementById('rotationInfo');
+            const rotationSeparator = document.getElementById('rotationSeparator');
+            const rotationAngleElement = document.getElementById('rotationAngle');
+            
+            if (isRotating && selectedShape) {
+                rotationInfo.style.display = 'inline';
+                rotationSeparator.style.display = 'inline';
+                rotationAngleElement.textContent = Math.round(rotationAngle) + '°';
+            } else {
+                rotationInfo.style.display = 'none';
+                rotationSeparator.style.display = 'none';
+            }
+        }
+
+        function hideRotationDisplay() {
+            document.getElementById('rotationInfo').style.display = 'none';
+            document.getElementById('rotationSeparator').style.display = 'none';
+        }
+
+        function drawShapeWithSelection(shape) {
+            const originalStrokeStyle = ctx.strokeStyle;
+            const originalLineWidth = ctx.lineWidth;
+            const originalLineCap = ctx.lineCap;
+            const originalFillStyle = ctx.fillStyle;
+            
+            // Configurar estilos
+            const stroke = shape.color || shape.strokeColor || currentColor;
+            const lineW = shape.lineWidth || brushSize;
+            ctx.strokeStyle = shape.selected ? 'red' : stroke;
+            ctx.lineWidth = shape.selected ? Math.max(3, lineW) : lineW;
+            ctx.lineCap = 'round';
+            ctx.fillStyle = shape.fillColor || currentColor;
+            
+            const rotation = shape.rotation || 0;
+            const style = { fill: !!shape.fillEnabled };
+            
+            ctx.save();
+            
+            // Aplicar rotación si existe
+            if (rotation !== 0) {
+                let centerX, centerY;
+                
+                // Calcular el centro según el tipo de figura
+                if (shape.type === 'brush' || shape.type === 'pencil') {
+                    if (shape.centerX !== undefined && shape.centerY !== undefined) {
+                        centerX = shape.centerX;
+                        centerY = shape.centerY;
+                    } else {
+                        const center = calculateBrushCenter(shape.points || []);
+                        centerX = center.x;
+                        centerY = center.y;
+                    }
+                } else if (shape.type === 'text') {
+                    centerX = shape.x;
+                    centerY = shape.y;
+                } else {
+                    centerX = (shape.startX + shape.endX) / 2;
+                    centerY = (shape.startY + shape.endY) / 2;
+                }
+                
+                // Aplicar transformación de rotación
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+                ctx.translate(-centerX, -centerY);
+            }
+            
+            // Dibujar la figura según su tipo
+            switch (shape.type) {
+                case 'line':
+                    drawLine(shape.startX, shape.startY, shape.endX, shape.endY);
+                    break;
+                case 'arrow':
+                    drawArrow(shape.startX, shape.startY, shape.endX, shape.endY);
+                    break;
+                case 'rectangle':
+                    drawRectangle(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
+                    break;
+                case 'circle':
+                    drawCircle(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
+                    break;
+                case 'ellipse':
+                    drawEllipse(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
+                    break;
+                case 'triangle':
+                    drawTriangle(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
+                    break;
+                case 'star':
+                    drawStar(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
+                    break;
+                case 'brush':
+                case 'pencil':
+                    if (shape.points && shape.points.length > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(shape.points[0].x, shape.points[0].y);
+                        for (let i = 1; i < shape.points.length; i++) {
+                            ctx.lineTo(shape.points[i].x, shape.points[i].y);
+                        }
+                        ctx.stroke();
+                    }
+                    break;
+                case 'text':
+                    // Para texto, usar función especializada si existe
+                    if (typeof drawTextShape === 'function') {
+                        drawTextShape(shape);
+                    } else {
+                        // Fallback simple para texto
+                        const fontSize = shape.fontSize || 24;
+                        const fontFamily = shape.fontFamily || 'Arial';
+                        const bold = shape.bold ? 'bold ' : '';
+                        const italic = shape.italic ? 'italic ' : '';
+                        ctx.font = `${italic}${bold}${fontSize}px ${fontFamily}`;
+                        ctx.fillStyle = shape.textColor || shape.color || currentColor;
+                        ctx.textAlign = shape.align || 'left';
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(shape.text || '', shape.x, shape.y);
+                    }
+                    break;
+            }
+            
+            ctx.restore();
+            
+            // Restaurar estilos originales
+            ctx.strokeStyle = originalStrokeStyle;
+            ctx.lineWidth = originalLineWidth;
+            ctx.lineCap = originalLineCap;
+            ctx.fillStyle = originalFillStyle;
+        }
+
+        function redrawCanvasWithShapes() {
+            // Restaurar el estado base del canvas desde el historial
+            if (history.length > 0 && historyStep >= 0) {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Dibujar todas las figuras guardadas encima
+                    shapes.forEach(shape => drawShapeWithSelection(shape));
+                };
+                img.src = history[Math.min(historyStep, history.length - 1)];
+            } else {
+                // Si no hay historial, limpiar y dibujar solo las figuras
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Dibujar todas las figuras guardadas
+                shapes.forEach(shape => drawShapeWithSelection(shape));
+            }
         }
 
         function pickColor(pos) {
@@ -1704,6 +2694,137 @@
         function applyZoom() {
             canvas.style.transform = `scale(${zoom})`;
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            if (showRulers) {
+                updateRulers();
+            }
+            if (showGrid) {
+                updateGrid();
+            }
+        }
+
+        // Funciones para reglas y cuadrícula
+        function toggleRulers() {
+            showRulers = !showRulers;
+            const rulersBtn = document.getElementById('rulersBtn');
+            const rulerHorizontal = document.getElementById('rulerHorizontal');
+            const rulerVertical = document.getElementById('rulerVertical');
+            const rulerCorner = document.getElementById('rulerCorner');
+            
+            if (showRulers) {
+                rulerHorizontal.style.display = 'block';
+                rulerVertical.style.display = 'block';
+                rulerCorner.style.display = 'block';
+                rulersBtn.style.backgroundColor = '#4CAF50';
+                updateRulers();
+            } else {
+                rulerHorizontal.style.display = 'none';
+                rulerVertical.style.display = 'none';
+                rulerCorner.style.display = 'none';
+                rulersBtn.style.backgroundColor = '';
+            }
+        }
+
+        function toggleGrid() {
+            showGrid = !showGrid;
+            const gridBtn = document.getElementById('gridBtn');
+            const gridOverlay = document.getElementById('gridOverlay');
+            
+            if (showGrid) {
+                gridOverlay.style.display = 'block';
+                gridOverlay.style.width = (canvas.width * zoom) + 'px';
+                gridOverlay.style.height = (canvas.height * zoom) + 'px';
+                gridBtn.style.backgroundColor = '#4CAF50';
+                updateGrid();
+            } else {
+                gridOverlay.style.display = 'none';
+                gridBtn.style.backgroundColor = '';
+            }
+        }
+
+        function updateRulers() {
+            updateHorizontalRuler();
+            updateVerticalRuler();
+        }
+
+        function updateHorizontalRuler() {
+            const rulerHorizontal = document.getElementById('rulerHorizontal');
+            const canvasWidth = canvas.width;
+            rulerHorizontal.innerHTML = '';
+            rulerHorizontal.style.width = (canvasWidth * zoom) + 'px';
+            
+            // Ajustar el espaciado según el zoom
+            let actualUnit = rulerUnit;
+            if (zoom < 0.5) actualUnit = 50;
+            else if (zoom < 1) actualUnit = 25;
+            else if (zoom > 3) actualUnit = 5;
+            
+            const tickSpacing = actualUnit * zoom;
+            const numberOfTicks = Math.ceil(canvasWidth / actualUnit);
+            
+            for (let i = 0; i <= numberOfTicks; i++) {
+                const tick = document.createElement('div');
+                tick.className = 'ruler-tick';
+                tick.style.position = 'absolute';
+                tick.style.left = (i * tickSpacing) + 'px';
+                
+                if (i % 5 === 0) {
+                    tick.className += ' ruler-tick-major';
+                    tick.textContent = (i * actualUnit).toString();
+                } else {
+                    tick.className += ' ruler-tick-minor';
+                }
+                
+                rulerHorizontal.appendChild(tick);
+            }
+        }
+
+        function updateVerticalRuler() {
+            const rulerVertical = document.getElementById('rulerVertical');
+            const canvasHeight = canvas.height;
+            rulerVertical.innerHTML = '';
+            rulerVertical.style.height = (canvasHeight * zoom) + 'px';
+            
+            // Ajustar el espaciado según el zoom
+            let actualUnit = rulerUnit;
+            if (zoom < 0.5) actualUnit = 50;
+            else if (zoom < 1) actualUnit = 25;
+            else if (zoom > 3) actualUnit = 5;
+            
+            const tickSpacing = actualUnit * zoom;
+            const numberOfTicks = Math.ceil(canvasHeight / actualUnit);
+            
+            for (let i = 0; i <= numberOfTicks; i++) {
+                const tick = document.createElement('div');
+                tick.className = 'ruler-tick';
+                tick.style.position = 'absolute';
+                tick.style.top = (i * tickSpacing) + 'px';
+                
+                if (i % 5 === 0) {
+                    tick.className += ' ruler-tick-major';
+                    tick.textContent = (i * actualUnit).toString();
+                } else {
+                    tick.className += ' ruler-tick-minor';
+                }
+                
+                rulerVertical.appendChild(tick);
+            }
+        }
+
+        function updateGrid() {
+            const gridOverlay = document.getElementById('gridOverlay');
+            const canvasWidth = canvas.width * zoom;
+            const canvasHeight = canvas.height * zoom;
+            
+            gridOverlay.style.width = canvasWidth + 'px';
+            gridOverlay.style.height = canvasHeight + 'px';
+            
+            // Usar CSS background para una cuadrícula más visible
+            const actualGridSize = gridSize * zoom;
+            gridOverlay.style.backgroundImage = `
+                linear-gradient(to right, rgba(20, 255, 236, 0.3) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(20, 255, 236, 0.3) 1px, transparent 1px)
+            `;
+            gridOverlay.style.backgroundSize = `${actualGridSize}px ${actualGridSize}px`;
         }
 
         function handleWheel(e) {
@@ -1714,16 +2835,53 @@
                 } else {
                     zoomOut();
                 }
+            } else if (rightClickHeld) {
+                e.preventDefault();
+                
+                const pos = getMousePos(e);
+                
+                if (!isResizing) {
+                    // Seleccionar figura para redimensionar
+                    const shapeToResize = selectBestShapeAtPosition(pos.x, pos.y);
+                    
+                    if (shapeToResize) {
+                        shapes.forEach(shape => shape.selected = false);
+                        selectedShape = shapeToResize;
+                        selectedShape.selected = true;
+                        isResizing = true;
+                        canvas.style.cursor = 'nesw-resize';
+                        redrawCanvasWithShapes();
+                        showNotification('Figura seleccionada para escalar (mantén click derecho + rueda)');
+                    }
+                }
+                
+                if (selectedShape && isResizing) {
+                    const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05; // Escalar hacia abajo o arriba
+                    resizeShape(selectedShape, scaleFactor);
+                    redrawCanvasWithShapes();
+                }
             }
         }
 
         // Tool selection
         function selectTool(tool) {
+            // Limpiar selecciones y estados de manipulación al cambiar herramienta
+            shapes.forEach(shape => shape.selected = false);
+            selectedShape = null;
+            isMoving = false;
+            isRotating = false;
+            isResizing = false;
+            hideRotationDisplay();
+            canvas.style.cursor = 'crosshair';
+            
             currentTool = tool;
             document.querySelectorAll('.sidebar-left .tool-btn').forEach(btn => btn.classList.remove('active'));
             const btn = document.getElementById(tool + '-btn');
             if (btn) btn.classList.add('active');
             updateStatus();
+            
+            // Redibujar para limpiar las selecciones visuales
+            redrawCanvasWithShapes();
             
             if (tool === 'gradient') {
                 updateFillStyle();
@@ -1898,6 +3056,9 @@
             if (confirm('¿Crear un nuevo canvas? Se perderá el trabajo actual.')) {
                 ctx.fillStyle = 'white';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                shapes = []; // Limpiar figuras guardadas
+                lastClickedShapes = [];
+                selectedShape = null;
                 history = [];
                 historyStep = -1;
                 saveState();
@@ -1910,6 +3071,9 @@
             if (confirm('¿Estás seguro de que quieres limpiar el canvas?')) {
                 ctx.fillStyle = 'white';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                shapes = []; // Limpiar también las figuras guardadas
+                lastClickedShapes = [];
+                selectedShape = null;
                 saveState();
                 updateMinimap();
                 showNotification('Canvas limpiado');
@@ -2112,7 +3276,17 @@ C: Círculo
 T: Triángulo
 X: Texto
 M: Seleccionar
-V: Mover`);
+V: Mover
+
+Manipulación de figuras:
+Ctrl + Click: Mover figuras
+Shift + Click: Rotar figuras
+Click derecho + Rueda: Escalar figuras
+
+Notas:
+- Las figuras se resaltan en rojo cuando están seleccionadas
+- Si hay figuras superpuestas, haz clic varias veces para seleccionar diferentes figuras
+- Mantén presionada la tecla modificadora mientras arrastras`);
         }
 
         function showAbout() {
