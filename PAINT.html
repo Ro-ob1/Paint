@@ -749,8 +749,11 @@
             <div class="menu-item">Ver</div>
             <div class="dropdown-content">
                 <a onclick="toggleGrid()">Mostrar cuadrícula</a>
+                <a onclick="setGridSize()">Configurar cuadrícula...</a>
                 <a onclick="toggleRulers()">Mostrar reglas</a>
+                <a onclick="setRulerUnit()">Configurar reglas...</a>
                 <a onclick="toggleMinimap()">Minimapa</a>
+                <a onclick="showResizeDialog()">Redimensionar canvas...</a>
                 <a onclick="fullscreen()">Pantalla completa</a>
             </div>
         </div>
@@ -814,6 +817,7 @@
             <label>Vista:</label>
             <button class="tool-btn" onclick="toggleRulers()" id="rulersBtn" title="Mostrar/Ocultar Reglas">📏</button>
             <button class="tool-btn" onclick="toggleGrid()" id="gridBtn" title="Mostrar/Ocultar Cuadrícula">⊞</button>
+            <button class="tool-btn" onclick="showResizeDialog()" title="Redimensionar Canvas">📐</button>
         </div>
     </div>
 
@@ -1044,9 +1048,24 @@
     <div id="resizeModal" class="modal">
         <div class="modal-content">
             <h3>📐 Cambiar Tamaño del Canvas</h3>
-            <label>Ancho: <input type="number" id="newWidth" value="1200" min="1" max="5000"></label>
-            <label>Alto: <input type="number" id="newHeight" value="800" min="1" max="5000"></label>
-            <label><input type="checkbox" id="maintainAspect" checked> Mantener proporción</label>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <label>Ancho: <input type="number" id="newWidth" value="1200" min="1" max="5000"></label>
+                    <label>Alto: <input type="number" id="newHeight" value="800" min="1" max="5000"></label>
+                    <label><input type="checkbox" id="maintainAspect" checked> Mantener proporción</label>
+                </div>
+                <div style="flex: 1;">
+                    <label>Presets comunes:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 5px;">
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(800, 600)" style="font-size: 11px; padding: 5px;">800x600</button>
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(1024, 768)" style="font-size: 11px; padding: 5px;">1024x768</button>
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(1280, 720)" style="font-size: 11px; padding: 5px;">1280x720</button>
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(1920, 1080)" style="font-size: 11px; padding: 5px;">1920x1080</button>
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(2560, 1440)" style="font-size: 11px; padding: 5px;">2560x1440</button>
+                        <button class="btn-secondary" onclick="resizeCanvasToPreset(1080, 1080)" style="font-size: 11px; padding: 5px;">1080x1080</button>
+                    </div>
+                </div>
+            </div>
             <button class="btn-primary" onclick="applyResize()">Aplicar</button>
             <button class="btn-secondary" onclick="closeResizeModal()">Cancelar</button>
         </div>
@@ -2678,6 +2697,318 @@
             showNotification('Color capturado: ' + hex);
         }
 
+        // ==========================================
+        // FUNCIONES DE REDIMENSIÓN DE CANVAS
+        // ==========================================
+        
+        function showResizeDialog() {
+            const modal = document.getElementById('resizeModal');
+            const widthInput = document.getElementById('newWidth');
+            const heightInput = document.getElementById('newHeight');
+            const aspectCheckbox = document.getElementById('maintainAspect');
+            
+            // Establecer valores actuales
+            widthInput.value = canvas.width;
+            heightInput.value = canvas.height;
+            
+            // Event listeners para mantener proporción
+            widthInput.oninput = function() {
+                if (aspectCheckbox.checked) {
+                    const ratio = canvas.height / canvas.width;
+                    heightInput.value = Math.round(widthInput.value * ratio);
+                }
+            };
+            
+            heightInput.oninput = function() {
+                if (aspectCheckbox.checked) {
+                    const ratio = canvas.width / canvas.height;
+                    widthInput.value = Math.round(heightInput.value * ratio);
+                }
+            };
+            
+            modal.style.display = 'flex';
+        }
+        
+        function applyResize() {
+            const newWidth = parseInt(document.getElementById('newWidth').value);
+            const newHeight = parseInt(document.getElementById('newHeight').value);
+            
+            if (newWidth <= 0 || newHeight <= 0 || newWidth > 5000 || newHeight > 5000) {
+                showNotification('Dimensiones inválidas. Use valores entre 1 y 5000 píxeles.', 'error');
+                return;
+            }
+            
+            // Guardar el contenido actual del canvas
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            tempCtx.drawImage(canvas, 0, 0);
+            
+            // Redimensionar el canvas
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            
+            // Limpiar y establecer fondo blanco
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, newWidth, newHeight);
+            
+            // Redibujar el contenido anterior
+            ctx.drawImage(tempCanvas, 0, 0);
+            
+            // Actualizar todas las capas con el nuevo tamaño
+            layers.forEach(layer => {
+                if (layer.canvas) {
+                    const layerTempCanvas = document.createElement('canvas');
+                    const layerTempCtx = layerTempCanvas.getContext('2d');
+                    layerTempCanvas.width = layer.canvas.width;
+                    layerTempCanvas.height = layer.canvas.height;
+                    layerTempCtx.drawImage(layer.canvas, 0, 0);
+                    
+                    layer.canvas.width = newWidth;
+                    layer.canvas.height = newHeight;
+                    layer.ctx.fillStyle = 'transparent';
+                    layer.ctx.clearRect(0, 0, newWidth, newHeight);
+                    layer.ctx.drawImage(layerTempCanvas, 0, 0);
+                }
+            });
+            
+            // Actualizar UI
+            document.getElementById('canvasSize').textContent = `${newWidth} x ${newHeight} px`;
+            updateRulers();
+            updateFileSize();
+            
+            // Redibujar con las formas guardadas
+            redrawCanvasWithShapes();
+            
+            closeResizeModal();
+            showNotification(`Canvas redimensionado a ${newWidth} x ${newHeight} píxeles`, 'success');
+            
+            // Guardar estado
+            saveState();
+            saveShapesState();
+        }
+        
+        function closeResizeModal() {
+            document.getElementById('resizeModal').style.display = 'none';
+        }
+        
+        function resizeCanvasToPreset(width, height) {
+            document.getElementById('newWidth').value = width;
+            document.getElementById('newHeight').value = height;
+            applyResize();
+        }
+
+        // ==========================================
+        // FUNCIONES MEJORADAS DE CUADRÍCULA Y REGLAS
+        // ==========================================
+        
+        function toggleGrid() {
+            showGrid = !showGrid;
+            const gridBtn = document.getElementById('gridBtn');
+            
+            if (showGrid) {
+                if (gridBtn) {
+                    gridBtn.classList.add('active');
+                    gridBtn.style.backgroundColor = '#0d7377';
+                    gridBtn.style.color = 'white';
+                }
+                showNotification('Cuadrícula activada', 'success');
+            } else {
+                if (gridBtn) {
+                    gridBtn.classList.remove('active');
+                    gridBtn.style.backgroundColor = '';
+                    gridBtn.style.color = '';
+                }
+                showNotification('Cuadrícula desactivada', 'warning');
+            }
+            
+            redrawCanvasWithShapes();
+        }
+        
+        function setGridSize() {
+            const newSize = prompt('Ingrese el tamaño de la cuadrícula (píxeles):', gridSize);
+            if (newSize !== null && !isNaN(newSize) && newSize > 0) {
+                gridSize = parseInt(newSize);
+                if (showGrid) {
+                    redrawCanvasWithShapes();
+                }
+                showNotification(`Tamaño de cuadrícula: ${gridSize}px`, 'success');
+            }
+        }
+        
+        function toggleRulers() {
+            showRulers = !showRulers;
+            const rulerBtn = document.getElementById('rulersBtn');
+            
+            if (showRulers) {
+                if (rulerBtn) {
+                    rulerBtn.classList.add('active');
+                    rulerBtn.style.backgroundColor = '#0d7377';
+                    rulerBtn.style.color = 'white';
+                }
+                createRulers();
+                showNotification('Reglas activadas', 'success');
+            } else {
+                if (rulerBtn) {
+                    rulerBtn.classList.remove('active');
+                    rulerBtn.style.backgroundColor = '';
+                    rulerBtn.style.color = '';
+                }
+                hideRulers();
+                showNotification('Reglas desactivadas', 'warning');
+            }
+        }
+        
+        function createRulers() {
+            // Eliminar reglas existentes
+            hideRulers();
+            
+            const canvasContainer = canvas.parentElement;
+            
+            // Crear regla horizontal
+            const hRuler = document.createElement('div');
+            hRuler.id = 'rulerHorizontal';
+            hRuler.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 20px;
+                width: ${canvas.width}px;
+                height: 20px;
+                background: #f0f0f0;
+                border-bottom: 1px solid #ccc;
+                font-size: 10px;
+                font-family: monospace;
+                z-index: 100;
+                overflow: hidden;
+                pointer-events: none;
+            `;
+            
+            // Agregar marcas a la regla horizontal
+            for (let i = 0; i <= canvas.width; i += rulerUnit) {
+                const mark = document.createElement('div');
+                mark.style.cssText = `
+                    position: absolute;
+                    left: ${i}px;
+                    top: 0;
+                    width: 1px;
+                    height: ${i % (rulerUnit * 10) === 0 ? '20px' : i % (rulerUnit * 5) === 0 ? '12px' : '8px'};
+                    background: #666;
+                `;
+                hRuler.appendChild(mark);
+                
+                // Agregar números cada 100 píxeles
+                if (i % (rulerUnit * 10) === 0 && i > 0) {
+                    const label = document.createElement('div');
+                    label.textContent = i.toString();
+                    label.style.cssText = `
+                        position: absolute;
+                        left: ${i + 2}px;
+                        top: 2px;
+                        color: #333;
+                        font-size: 9px;
+                    `;
+                    hRuler.appendChild(label);
+                }
+            }
+            
+            // Crear regla vertical
+            const vRuler = document.createElement('div');
+            vRuler.id = 'rulerVertical';
+            vRuler.style.cssText = `
+                position: absolute;
+                top: 20px;
+                left: 0;
+                width: 20px;
+                height: ${canvas.height}px;
+                background: #f0f0f0;
+                border-right: 1px solid #ccc;
+                font-size: 10px;
+                font-family: monospace;
+                z-index: 100;
+                overflow: hidden;
+                pointer-events: none;
+            `;
+            
+            // Agregar marcas a la regla vertical
+            for (let i = 0; i <= canvas.height; i += rulerUnit) {
+                const mark = document.createElement('div');
+                mark.style.cssText = `
+                    position: absolute;
+                    top: ${i}px;
+                    left: 0;
+                    height: 1px;
+                    width: ${i % (rulerUnit * 10) === 0 ? '20px' : i % (rulerUnit * 5) === 0 ? '12px' : '8px'};
+                    background: #666;
+                `;
+                vRuler.appendChild(mark);
+                
+                // Agregar números cada 100 píxeles
+                if (i % (rulerUnit * 10) === 0 && i > 0) {
+                    const label = document.createElement('div');
+                    label.textContent = i.toString();
+                    label.style.cssText = `
+                        position: absolute;
+                        top: ${i + 2}px;
+                        left: 2px;
+                        color: #333;
+                        font-size: 9px;
+                        writing-mode: vertical-lr;
+                        text-orientation: mixed;
+                    `;
+                    vRuler.appendChild(label);
+                }
+            }
+            
+            // Crear esquina de reglas
+            const corner = document.createElement('div');
+            corner.id = 'rulerCorner';
+            corner.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 20px;
+                height: 20px;
+                background: #e0e0e0;
+                border-right: 1px solid #ccc;
+                border-bottom: 1px solid #ccc;
+                z-index: 101;
+                pointer-events: none;
+            `;
+            
+            canvasContainer.appendChild(hRuler);
+            canvasContainer.appendChild(vRuler);
+            canvasContainer.appendChild(corner);
+        }
+        
+        function hideRulers() {
+            const hRuler = document.getElementById('rulerHorizontal');
+            const vRuler = document.getElementById('rulerVertical');
+            const corner = document.getElementById('rulerCorner');
+            
+            if (hRuler) hRuler.remove();
+            if (vRuler) vRuler.remove();
+            if (corner) corner.remove();
+        }
+        
+        function updateRulers() {
+            if (showRulers) {
+                hideRulers();
+                createRulers();
+            }
+        }
+        
+        function setRulerUnit() {
+            const newUnit = prompt('Ingrese la unidad de las reglas (píxeles por marca):', rulerUnit);
+            if (newUnit !== null && !isNaN(newUnit) && newUnit > 0) {
+                rulerUnit = parseInt(newUnit);
+                if (showRulers) {
+                    updateRulers();
+                }
+                showNotification(`Unidad de reglas: ${rulerUnit}px`, 'success');
+            }
+        }
+
         function addText() {
             const text = document.getElementById('textInput').value;
             const fontSize = document.getElementById('fontSize').value;
@@ -3840,6 +4171,7 @@ Ctrl + N: Nuevo canvas
 Ctrl + O: Abrir imagen
 Ctrl + S: Exportar imagen
 Ctrl + P: Guardar proyecto
+Ctrl + R: Redimensionar canvas
 Ctrl + Z: Deshacer
 Ctrl + Y: Rehacer
 Ctrl + C: Copiar canvas al portapapeles
@@ -3853,17 +4185,19 @@ E: Borrador
 F: Relleno
 I: Cuentagotas
 L: Línea
-
-Funciones adicionales:
-• Arrastra y suelta imágenes al canvas
-• Copia imágenes desde otras aplicaciones
-• Múltiples capas con opacidad individual
 R: Rectángulo
 C: Círculo
 T: Triángulo
 X: Texto
 M: Seleccionar
 V: Mover
+
+Funciones adicionales:
+• Arrastra y suelta imágenes al canvas
+• Copia imágenes desde otras aplicaciones
+• Múltiples capas con opacidad individual
+• Cuadrícula y reglas configurables
+• Redimensión con presets comunes
 
 Manipulación de figuras:
 Ctrl + Click: Mover figuras
@@ -3915,6 +4249,10 @@ Notas:
                     case 'p':
                         e.preventDefault();
                         saveProject();
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        showResizeDialog();
                         break;
                 }
             } else {
