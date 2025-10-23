@@ -313,6 +313,14 @@
             background: #4e4e4e;
         }
 
+        .layer[draggable="true"] {
+            cursor: grab;
+        }
+
+        .layer[draggable="true"]:active {
+            cursor: grabbing;
+        }
+
         .slider {
             width: 100%;
             margin: 10px 0;
@@ -700,13 +708,14 @@
             <div class="dropdown-content">
                 <a onclick="newCanvas()">Nuevo (Ctrl+N)</a>
                 <div class="dropdown-divider"></div>
-                <a onclick="saveProject()">Guardar Proyecto</a>
-                <a onclick="saveAsProject()">Guardar Proyecto Como...</a>
-                <a onclick="loadProject()">Cargar Proyecto</a>
+                <a onclick="saveProject()">💾 Guardar Proyecto (editable)</a>
+                <a onclick="saveAsProject()">💾 Guardar Proyecto Como...</a>
+                <a onclick="loadProject()">📂 Cargar Proyecto</a>
                 <div class="dropdown-divider"></div>
-                <a onclick="loadImage()">Importar Imagen (Ctrl+O)</a>
-                <a onclick="saveImage()">Exportar PNG (Ctrl+S)</a>
-                <a onclick="saveAsJPEG()">Exportar JPEG</a>
+                <a onclick="loadImage()">📥 Importar Imagen (Ctrl+O)</a>
+                <a onclick="saveImage()">🖼️ Exportar PNG Completo (Ctrl+S)</a>
+                <a onclick="saveAsJPEG()">🖼️ Exportar JPEG Completo</a>
+                <a onclick="exportCurrentLayerOnly()">📄 Exportar Solo Capa Actual</a>
                 <div class="dropdown-divider"></div>
                 <a onclick="toggleAutoSave()">🔄 Alternar Autoguardado</a>
             </div>
@@ -716,9 +725,22 @@
             <div class="dropdown-content">
                 <a onclick="undo()">Deshacer (Ctrl+Z)</a>
                 <a onclick="redo()">Rehacer (Ctrl+Y)</a>
+                <div class="dropdown-divider"></div>
                 <a onclick="copyCanvasToClipboard()">Copiar Canvas (Ctrl+C)</a>
                 <a onclick="pasteFromClipboard()">Pegar Imagen (Ctrl+V)</a>
+                <div class="dropdown-divider"></div>
+                <a onclick="selectAll()">🧮 Seleccionar Todo (Ctrl+A)</a>
+                <a onclick="invertSelection()">🔄 Invertir Selección</a>
+                <a onclick="deleteSelection()">🗑️ Eliminar Selección (Supr)</a>
+                <a onclick="clearSelection()">❌ Cancelar Selección (Esc)</a>
+                <div class="dropdown-divider"></div>
+                <a onclick="toggleTransparentSelection()">
+                    <span id="transparentSelectionIndicator">☐</span> Selección Transparente
+                </a>
+                <div class="dropdown-divider"></div>
                 <a onclick="clearCanvas()">Limpiar todo</a>
+                <div class="dropdown-divider"></div>
+                <a onclick="setFillTolerance()">Tolerancia de relleno...</a>
             </div>
         </div>
         <div class="dropdown">
@@ -730,6 +752,9 @@
                 <a onclick="flipHorizontal()">Voltear horizontal</a>
                 <a onclick="flipVertical()">Voltear vertical</a>
                 <a onclick="cropCanvas()">Recortar</a>
+                <div class="dropdown-divider"></div>
+                <a onclick="setBackgroundColor()">🎨 Color de Fondo...</a>
+                <a onclick="setBackgroundTransparent()">⬜ Fondo Transparente</a>
             </div>
         </div>
         <div class="dropdown">
@@ -743,6 +768,16 @@
                 <a onclick="applyFilter('brightness')">Brillo</a>
                 <a onclick="applyFilter('contrast')">Contraste</a>
                 <a onclick="applyFilter('pixelate')">Pixelar</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <div class="menu-item">🎨 Capas</div>
+            <div class="dropdown-content">
+                <a onclick="addLayer()">➕ Nueva Capa</a>
+                <a onclick="duplicateLayer()">📋 Duplicar Capa Actual</a>
+                <a onclick="deleteLayer()">🗑️ Eliminar Capa Actual</a>
+                <a onclick="mergeLayerDown()">⬇️ Combinar con Inferior</a>
+                <a onclick="flattenLayers()">🖼️ Aplanar Todas las Capas</a>
             </div>
         </div>
         <div class="dropdown">
@@ -873,8 +908,11 @@
             <button class="tool-btn" onclick="selectTool('gradient')" id="gradient-btn" title="Gradiente">
                 <span class="tool-icon">🌈</span>
             </button>
-            <button class="tool-btn" onclick="selectTool('select')" id="select-btn" title="Seleccionar (M)">
+            <button class="tool-btn" onclick="selectTool('select')" id="select-btn" title="Seleccionar Rectangular (M)">
                 <span class="tool-icon">◻️</span>
+            </button>
+            <button class="tool-btn" onclick="selectTool('freeformSelect')" id="freeform-select-btn" title="Selección Libre (Shift+M)">
+                <span class="tool-icon">✏️◻️</span>
             </button>
             <button class="tool-btn" onclick="selectTool('move')" id="move-btn" title="Mover (V)">
                 <span class="tool-icon">✋</span>
@@ -1036,6 +1074,13 @@
                 <option value="Impact">Impact</option>
             </select>
             <label>Tamaño: <input type="number" id="fontSize" value="30" min="8" max="500"></label>
+            <label>Alineación:
+                <select id="textAlign">
+                    <option value="left">Izquierda</option>
+                    <option value="center">Centro</option>
+                    <option value="right">Derecha</option>
+                </select>
+            </label>
             <label>
                 <input type="checkbox" id="boldText"> Negrita
                 <input type="checkbox" id="italicText"> Cursiva
@@ -1139,9 +1184,39 @@
         let selectionStart = null;
         let selectionEnd = null;
         let clipboard = null;
+        
+        // Variables para el sistema de selección mejorado
+        let activeSelection = null; // {x, y, width, height, imageData}
+        let freeformPoints = []; // Para selección de forma libre
+        let transparentSelection = false; // Para selección transparente
+        let selectionImageData = null; // Datos de la imagen seleccionada
+        let isMovingSelection = false; // Si se está moviendo la selección
+        let selectionOffsetX = 0;
+        let selectionOffsetY = 0;
+        let selectionOriginalX = 0; // Posición original X de la selección
+        let selectionOriginalY = 0; // Posición original Y de la selección
+        let selectionMoved = false; // Si la selección fue movida desde su posición original
+        let canvasBeforeSelection = null; // Copia del canvas antes de mover la selección
+        
         let points = [];
         let curvePoints = [];
         let cloneSource = null;
+    let lastStampPoint = null; // Para pinceles basados en "dabs"
+    let fillTolerance = 10; // Tolerancia para flood fill (ajustable)
+    // Pan y entrada avanzada
+    let spacePressed = false;
+    let isPanning = false;
+    let panStartX = 0, panStartY = 0, panScrollLeft = 0, panScrollTop = 0;
+    let editingTextShape = null; // para editar texto existente
+
+    // Estados de interacción para Polígono y Curva
+    let polygonModeActive = false;
+    let polygonPoints = [];
+    let curvePhase = 0; // 0: inactivo, 1: arrastrando primer control, 2: primer control fijado, 3: arrastrando segundo control, 4: listo para finalizar
+    let curveStart = null;
+    let curveEnd = null;
+    let curveCp1 = null; // primer punto de control
+    let curveCp2 = null; // segundo punto de control
         
         // Variables para selección y manipulación de figuras
         let shapes = [];
@@ -1190,6 +1265,9 @@
             // Verificar si hay un autoguardado previo
             setTimeout(() => {
                 loadAutoSave();
+                // Inicia una nueva sesión: aún no se ha cerrado de forma "limpia"
+                // Esto se usará para decidir si mostrar el diálogo de recuperación en el próximo arranque
+                try { localStorage.setItem('paintpro_last_exit_clean', 'false'); } catch(e) { /* ignore */ }
             }, 1000);
             
             // Actualizar título de la ventana
@@ -1214,16 +1292,30 @@
                 gridO.style.zIndex = '10';
             }
             
-            // Event listeners del canvas
+            // Event listeners del canvas (mouse)
             canvas.addEventListener('mousedown', startDrawing);
             canvas.addEventListener('mousemove', draw);
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
+            canvas.addEventListener('dblclick', handleCanvasDoubleClick);
             canvas.addEventListener('mousemove', updateCoordinates);
             canvas.addEventListener('wheel', handleWheel);
             canvas.addEventListener('contextmenu', function(e) {
                 e.preventDefault(); // Prevenir menú contextual
             });
+
+            // Soporte de Pointer Events para evitar cortes al salir del canvas
+            if (window.PointerEvent) {
+                canvas.addEventListener('pointerdown', (e) => {
+                    try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+                    startDrawing(e);
+                });
+                canvas.addEventListener('pointermove', draw);
+                canvas.addEventListener('pointerup', (e) => {
+                    try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+                    stopDrawing(e);
+                });
+            }
             
             // Event listeners para drag & drop
             canvas.addEventListener('dragover', handleDragOver);
@@ -1287,6 +1379,50 @@
                     
                     redrawCanvasWithShapes();
                 }
+                // Pan mientras se mantiene Space o botón central
+                if (isPanning) {
+                    const area = document.getElementById('canvasArea');
+                    area.scrollLeft = panScrollLeft - (e.clientX - panStartX);
+                    area.scrollTop = panScrollTop - (e.clientY - panStartY);
+                }
+            });
+
+            // Marcar cierre "limpio" cuando la pestaña/ventana se está cerrando o recargando
+            // Si el navegador se cierra inesperadamente, este evento no se dispara y en el próximo arranque
+            // podremos ofrecer recuperar el autoguardado solo en ese caso.
+            window.addEventListener('beforeunload', () => {
+                try { localStorage.setItem('paintpro_last_exit_clean', 'true'); } catch(e) { /* ignore */ }
+            });
+
+            // Pan: eventos de mouse en el área de canvas
+            const area = document.getElementById('canvasArea');
+            area.addEventListener('mousedown', (e) => {
+                if (spacePressed || e.button === 1) {
+                    isPanning = true;
+                    panStartX = e.clientX; panStartY = e.clientY;
+                    panScrollLeft = area.scrollLeft; panScrollTop = area.scrollTop;
+                    area.style.cursor = 'grabbing';
+                    e.preventDefault();
+                }
+            });
+            document.addEventListener('mouseup', () => {
+                if (isPanning) {
+                    isPanning = false;
+                    area.style.cursor = '';
+                }
+            });
+            // Space para pan
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !spacePressed && !e.repeat) {
+                    // Evitar scroll de página
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        spacePressed = true; area.style.cursor = 'grab';
+                    }
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') { spacePressed = false; area.style.cursor = ''; }
             });
             
             // Actualizar tamaño de archivo
@@ -1299,9 +1435,15 @@
                 gridBtn.style.backgroundColor = '';
                 gridBtn.style.color = '';
             }
+
+            // Desactivar suavizado para un renderizado más nítido (útil para lápiz pixel-art)
+            if (ctx.imageSmoothingEnabled !== undefined) {
+                ctx.imageSmoothingEnabled = false;
+            }
         }
 
         function startDrawing(e) {
+            if (spacePressed) return; // no dibujar mientras se hace pan con Space
             const pos = getMousePos(e);
             
             // Prevenir menú contextual en click derecho
@@ -1366,15 +1508,64 @@
             
             // Limpiar selecciones previas si no se está manipulando
             shapes.forEach(shape => shape.selected = false);
+
+            // Interacción POLÍGONO
+            if (currentTool === 'polygon') {
+                // Iniciar o agregar punto
+                if (!polygonModeActive) {
+                    saveShapesState();
+                    polygonModeActive = true;
+                    polygonPoints = [ { x: pos.x, y: pos.y } ];
+                    showNotification('Polígono: click para agregar vértices, doble click o Enter para cerrar, Esc para cancelar');
+                } else {
+                    polygonPoints.push({ x: pos.x, y: pos.y });
+                }
+                redrawCanvasWithShapes();
+                // Vista previa se dibuja en draw() con el mousemove
+                return;
+            }
+
+            // Interacción CURVA (estilo Paint: Bézier cúbica con arrastre)
+            if (currentTool === 'curve') {
+                if (curvePhase === 0) {
+                    // Primer click: inicio de la curva
+                    saveShapesState();
+                    curveStart = { x: pos.x, y: pos.y };
+                    curvePhase = 1; // siguiente click fija el final y entra en modo arrastre
+                    isDrawing = true; // para detectar arrastre
+                    showNotification('Curva: arrastra para definir curvatura inicial, suelta y arrastra de nuevo para el final');
+                } else if (curvePhase === 2) {
+                    // Segundo click: fin de la curva, ahora ajustando el segundo control
+                    curveEnd = { x: pos.x, y: pos.y };
+                    curvePhase = 3; // ajuste del segundo punto de control
+                    isDrawing = true;
+                } else if (curvePhase === 4) {
+                    // Finalizar la curva (ya se soltó el segundo control)
+                    curvePhase = 0;
+                    curveStart = null;
+                    curveEnd = null;
+                    isDrawing = false;
+                    redrawCanvasWithShapes();
+                    saveState();
+                    showNotification('Curva creada');
+                }
+                return;
+            }
             
             if (currentTool === 'text') {
-                textPosition = pos;
-                document.getElementById('textModal').style.display = 'flex';
+                // Si clic en texto existente: editar; si no: nuevo
+                const shapeToEdit = selectBestShapeAtPosition(pos.x, pos.y);
+                if (shapeToEdit && shapeToEdit.type === 'text') {
+                    openTextModal(shapeToEdit);
+                } else {
+                    textPosition = pos;
+                    openTextModal(null);
+                }
                 return;
             }
 
             if (currentTool === 'eyedropper') {
-                pickColor(pos);
+                pickColor(pos, e);
                 return;
             }
 
@@ -1384,7 +1575,66 @@
             }
 
             if (currentTool === 'select') {
+                // Verificar si se hizo click dentro de una selección existente para moverla
+                if (activeSelection && isPointInSelection(pos.x, pos.y)) {
+                    isMovingSelection = true;
+                    selectionOffsetX = pos.x - activeSelection.x;
+                    selectionOffsetY = pos.y - activeSelection.y;
+                    canvas.style.cursor = 'move';
+                    
+                    // Si es la primera vez que se mueve, limpiar el área original
+                    if (!selectionMoved && canvasBeforeSelection) {
+                        // Restaurar el canvas y luego limpiar solo el área de la selección
+                        ctx.putImageData(canvasBeforeSelection, 0, 0);
+                        
+                        // Limpiar el área original de la selección
+                        const bgColor = backgroundState && backgroundState.color ? backgroundState.color : '#ffffff';
+                        if (backgroundState && backgroundState.type === 'transparent') {
+                            ctx.clearRect(selectionOriginalX, selectionOriginalY, activeSelection.width, activeSelection.height);
+                        } else {
+                            ctx.fillStyle = bgColor;
+                            ctx.fillRect(selectionOriginalX, selectionOriginalY, activeSelection.width, activeSelection.height);
+                        }
+                        
+                        selectionMoved = true;
+                    }
+                    return;
+                }
+                // Si no, iniciar nueva selección
                 selectionStart = pos;
+                activeSelection = null;
+                selectionMoved = false;
+                return;
+            }
+
+            if (currentTool === 'freeformSelect') {
+                // Verificar si se hizo click dentro de una selección existente para moverla
+                if (activeSelection && isPointInSelection(pos.x, pos.y)) {
+                    isMovingSelection = true;
+                    selectionOffsetX = pos.x - activeSelection.x;
+                    selectionOffsetY = pos.y - activeSelection.y;
+                    canvas.style.cursor = 'move';
+                    
+                    // Si es la primera vez que se mueve, limpiar el área original
+                    if (!selectionMoved && canvasBeforeSelection) {
+                        ctx.putImageData(canvasBeforeSelection, 0, 0);
+                        
+                        const bgColor = backgroundState && backgroundState.color ? backgroundState.color : '#ffffff';
+                        if (backgroundState && backgroundState.type === 'transparent') {
+                            ctx.clearRect(selectionOriginalX, selectionOriginalY, activeSelection.width, activeSelection.height);
+                        } else {
+                            ctx.fillStyle = bgColor;
+                            ctx.fillRect(selectionOriginalX, selectionOriginalY, activeSelection.width, activeSelection.height);
+                        }
+                        
+                        selectionMoved = true;
+                    }
+                    return;
+                }
+                // Si no, iniciar nueva selección libre
+                freeformPoints = [pos];
+                isDrawing = true;
+                selectionMoved = false;
                 return;
             }
 
@@ -1406,16 +1656,27 @@
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
             }
-
-            if (currentTool === 'polygon' || currentTool === 'curve') {
-                if (e.shiftKey && points.length > 2) {
-                    finishShape();
-                }
-            }
+            // Nota: la lógica interactiva de polígono/curva se maneja arriba.
         }
 
         function draw(e) {
             const pos = getMousePos(e);
+            
+            // Manejar movimiento de selección
+            if (isMovingSelection && activeSelection && selectionImageData) {
+                // Calcular nueva posición
+                const newX = pos.x - selectionOffsetX;
+                const newY = pos.y - selectionOffsetY;
+                
+                // Actualizar posición de la selección
+                activeSelection.x = newX;
+                activeSelection.y = newY;
+                
+                // Redibujar canvas limpio + selección flotante
+                redrawCanvasWithShapes();
+                drawFloatingSelection();
+                return;
+            }
             
             // Manejar movimiento de figuras
             if (isMoving && selectedShape) {
@@ -1449,6 +1710,95 @@
             
             if (currentTool === 'select' && selectionStart) {
                 drawSelection(selectionStart, pos);
+            }
+
+            // Dibujar selección de forma libre
+            if (currentTool === 'freeformSelect' && isDrawing) {
+                freeformPoints.push(pos);
+                redrawCanvasWithShapes();
+                drawFreeformSelection();
+            }
+
+            // Vista previa de POLÍGONO
+            if (currentTool === 'polygon' && polygonModeActive && polygonPoints.length > 0) {
+                redrawCanvasWithShapes();
+                ctx.save();
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = brushSize;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+                for (let i = 1; i < polygonPoints.length; i++) {
+                    ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+                }
+                // línea temporal hacia el cursor
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+                return;
+            }
+
+            // Vista previa de CURVA (estilo Paint con Bézier cúbica)
+            if (currentTool === 'curve' && curvePhase > 0) {
+                redrawCanvasWithShapes();
+                ctx.save();
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = brushSize;
+                
+                if (curvePhase === 1 && isDrawing) {
+                    // Arrastrando desde el punto inicial para definir dirección/curvatura inicial
+                    // Línea recta temporal y primer punto de control
+                    curveCp1 = { x: pos.x, y: pos.y };
+                    ctx.beginPath();
+                    ctx.moveTo(curveStart.x, curveStart.y);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.strokeStyle = '#14FFEC';
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    // Dibujar manija
+                    ctx.fillStyle = '#14FFEC';
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (curvePhase === 2) {
+                    // Esperando segundo click (mostrar línea desde start hacia cursor)
+                    ctx.setLineDash([3, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(curveStart.x, curveStart.y);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                } else if (curvePhase === 3 && isDrawing) {
+                    // Arrastrando el segundo punto de control
+                    curveCp2 = { x: pos.x, y: pos.y };
+                    // Dibujar la curva Bézier cúbica completa
+                    ctx.beginPath();
+                    ctx.moveTo(curveStart.x, curveStart.y);
+                    ctx.bezierCurveTo(curveCp1.x, curveCp1.y, pos.x, pos.y, curveEnd.x, curveEnd.y);
+                    ctx.stroke();
+                    // Dibujar manijas de control
+                    ctx.strokeStyle = '#14FFEC';
+                    ctx.setLineDash([2, 2]);
+                    ctx.beginPath();
+                    ctx.moveTo(curveStart.x, curveStart.y);
+                    ctx.lineTo(curveCp1.x, curveCp1.y);
+                    ctx.moveTo(curveEnd.x, curveEnd.y);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#14FFEC';
+                    ctx.beginPath();
+                    ctx.arc(curveCp1.x, curveCp1.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+                return;
             }
 
             if (!isDrawing) return;
@@ -1517,6 +1867,88 @@
 
         function stopDrawing(e) {
             const pos = getMousePos(e);
+            
+            // Finalizar movimiento de selección
+            if (isMovingSelection) {
+                isMovingSelection = false;
+                canvas.style.cursor = 'crosshair';
+                
+                // Pegar la imagen en la nueva posición permanentemente
+                if (selectionImageData && selectionMoved) {
+                    // La imagen ya está dibujada en el canvas, solo necesitamos guardar el estado
+                    ctx.putImageData(selectionImageData, activeSelection.x, activeSelection.y);
+                    saveShapesState(); // Guardar para undo
+                    
+                    // Convertir el canvas actual a una imagen y agregarlo a las formas
+                    const img = new Image();
+                    img.onload = function() {
+                        const tempCanvas = document.createElement('canvas');
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCanvas.width = canvas.width;
+                        tempCanvas.height = canvas.height;
+                        tempCtx.drawImage(canvas, 0, 0);
+                        const imageData = tempCanvas.toDataURL('image/png');
+                        
+                        shapes.push({
+                            type: 'image',
+                            x: 0,
+                            y: 0,
+                            width: canvas.width,
+                            height: canvas.height,
+                            image: img,
+                            imageData: imageData,
+                            selected: false
+                        });
+                        
+                        redrawCanvasWithShapes();
+                        drawActiveSelection(); // Redibujar marco
+                    };
+                    img.src = canvas.toDataURL();
+                }
+                
+                showNotification('Selección colocada. Ctrl+C para copiar, Supr para eliminar, click fuera para nueva selección', 'info');
+                return;
+            }
+            
+            // Manejar transiciones de fase de CURVA estilo Paint
+            if (currentTool === 'curve' && curvePhase > 0) {
+                if (curvePhase === 1 && isDrawing) {
+                    // Soltar primer arrastre: fija curveCp1 y pasa a fase 2 (esperar click en final)
+                    curveCp1 = { x: pos.x, y: pos.y };
+                    curvePhase = 2;
+                    isDrawing = false;
+                    redrawCanvasWithShapes();
+                    return;
+                } else if (curvePhase === 3 && isDrawing) {
+                    // Soltar segundo arrastre: fija curveCp2 y crea la figura
+                    curveCp2 = { x: pos.x, y: pos.y };
+                    shapes.push({
+                        type: 'curve',
+                        startX: curveStart.x,
+                        startY: curveStart.y,
+                        endX: curveEnd.x,
+                        endY: curveEnd.y,
+                        cp1x: curveCp1.x,
+                        cp1y: curveCp1.y,
+                        cp2x: curveCp2.x,
+                        cp2y: curveCp2.y,
+                        color: currentColor,
+                        lineWidth: brushSize,
+                        selected: false,
+                        rotation: 0
+                    });
+                    curvePhase = 0;
+                    curveStart = null;
+                    curveEnd = null;
+                    curveCp1 = null;
+                    curveCp2 = null;
+                    isDrawing = false;
+                    redrawCanvasWithShapes();
+                    saveState();
+                    showNotification('Curva Bézier creada');
+                    return;
+                }
+            }
             
             // Manejar click derecho para escalado
             if (e.button === 2) {
@@ -1664,6 +2096,7 @@
                         });
                         redrawCanvasWithShapes(); // Redibujar con la nueva figura
                     }
+                    lastStampPoint = null; // reset de pincel estampado
                     break;
                 case 'pencil':
                     if (points && points.length > 0) {
@@ -1684,6 +2117,31 @@
                 case 'gradient':
                     drawGradient(startX, startY, pos.x, pos.y);
                     break;
+                case 'select':
+                    // Crear selección rectangular
+                    if (selectionStart && pos) {
+                        const x = Math.min(selectionStart.x, pos.x);
+                        const y = Math.min(selectionStart.y, pos.y);
+                        const width = Math.abs(pos.x - selectionStart.x);
+                        const height = Math.abs(pos.y - selectionStart.y);
+                        
+                        if (width > 5 && height > 5) {
+                            activeSelection = { x, y, width, height };
+                            captureSelection();
+                            selectionEnd = pos;
+                            redrawCanvasWithShapes();
+                            drawActiveSelection();
+                            showNotification('Área seleccionada (Ctrl+C para copiar, Supr para eliminar)', 'success');
+                        } else {
+                            clearSelection();
+                        }
+                    }
+                    break;
+                case 'freeformSelect':
+                    // Finalizar selección de forma libre
+                    finalizeFreeformSelection();
+                    break;
+                // Las herramientas polígono/curva se manejan de forma interactiva y no se comprometen aquí
             }
 
             ctx.globalAlpha = 1.0;
@@ -1693,34 +2151,108 @@
         }
 
         function drawBrush(pos) {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = brushSize;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            if (brushType === 'soft') {
-                ctx.shadowBlur = brushSize / 2;
-                ctx.shadowColor = currentColor;
-            } else {
-                ctx.shadowBlur = 0;
+            // Pincel basado en "dabs" (sellos) con espaciamiento
+            const step = Math.max(1, brushSize * (spacing / 10));
+            if (!lastStampPoint) {
+                lastStampPoint = { x: startX, y: startY };
             }
-            
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            
-            // Agregar punto al trazo actual
-            points.push({x: pos.x, y: pos.y});
+            const dx = pos.x - lastStampPoint.x;
+            const dy = pos.y - lastStampPoint.y;
+            const dist = Math.hypot(dx, dy);
+            const steps = Math.max(1, Math.floor(dist / step));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const x = lastStampPoint.x + dx * t;
+                const y = lastStampPoint.y + dy * t;
+                stampBrush(x, y);
+                // Registrar punto para reconstrucción del trazo como figura
+                points.push({ x, y });
+            }
+            lastStampPoint = { x: pos.x, y: pos.y };
         }
 
         function drawPencil(pos) {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = 1;
-            ctx.lineCap = 'square';
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            
-            // Agregar punto al trazo actual
-            points.push({x: pos.x, y: pos.y});
+            // Lápiz pixel-perfect: pinta píxeles 1x1 usando Bresenham
+            const last = points.length ? points[points.length - 1] : { x: startX, y: startY };
+            plotLine(Math.floor(last.x), Math.floor(last.y), Math.floor(pos.x), Math.floor(pos.y), (x, y) => {
+                ctx.fillStyle = currentColor;
+                ctx.fillRect(x, y, 1, 1);
+            });
+            points.push({ x: pos.x, y: pos.y });
+        }
+
+        function plotLine(x0, y0, x1, y1, drawPixel) {
+            let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+            let dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
+            let err = dx + dy, e2;
+            while (true) {
+                drawPixel(x0, y0);
+                if (x0 === x1 && y0 === y1) break;
+                e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        function stampBrush(x, y) {
+            ctx.save();
+            ctx.globalAlpha = opacity;
+            switch (brushType) {
+                case 'square': {
+                    const s = brushSize;
+                    ctx.fillStyle = currentColor;
+                    ctx.fillRect(x - s/2, y - s/2, s, s);
+                    break;
+                }
+                case 'soft': {
+                    const r = brushSize / 2;
+                    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+                    const col = currentColor;
+                    g.addColorStop(0, col);
+                    g.addColorStop(1, col + '00');
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                }
+                case 'calligraphy': {
+                    const rx = brushSize;
+                    const ry = Math.max(1, brushSize / 3);
+                    ctx.fillStyle = currentColor;
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, rx/2, ry/2, 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                }
+                case 'spray': {
+                    // reutiliza spray existente
+                    drawSpray({ x, y });
+                    break;
+                }
+                case 'pattern': {
+                    const p = document.createElement('canvas');
+                    p.width = p.height = Math.max(4, Math.floor(brushSize/2));
+                    const pctx = p.getContext('2d');
+                    pctx.fillStyle = currentColor;
+                    pctx.fillRect(0, 0, p.width, p.height);
+                    pctx.clearRect(p.width/2, 0, p.width/2, p.height/2);
+                    const pattern = ctx.createPattern(p, 'repeat');
+                    ctx.fillStyle = pattern;
+                    ctx.beginPath();
+                    ctx.arc(x, y, brushSize/2, 0, Math.PI*2);
+                    ctx.fill();
+                    break;
+                }
+                default: {
+                    // round por defecto
+                    ctx.fillStyle = currentColor;
+                    ctx.beginPath();
+                    ctx.arc(x, y, brushSize/2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
         }
 
         function drawSpray(pos) {
@@ -1734,12 +2266,15 @@
         }
 
         function drawEraser(pos) {
-            ctx.strokeStyle = 'white';
+            // Borrador que elimina píxeles (transparente si no hay fondo)
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
             ctx.lineWidth = brushSize;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
+            ctx.restore();
         }
 
         function drawLine(x1, y1, x2, y2, rotation = 0) {
@@ -1924,22 +2459,30 @@
         }
 
         function drawGradient(x1, y1, x2, y2) {
-            let gradient;
-            
-            if (gradientType === 'linear') {
-                gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-            } else if (gradientType === 'radial') {
-                const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                gradient = ctx.createRadialGradient(x1, y1, 0, x1, y1, radius);
-            } else if (gradientType === 'conic') {
-                gradient = ctx.createConicGradient(0, x1, y1);
+            // Persistir el gradiente como fondo para que no desaparezca al redibujar
+            let radius = 0;
+            if (gradientType === 'radial') {
+                radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
             }
-            
-            gradient.addColorStop(0, currentColor);
-            gradient.addColorStop(1, currentColor2);
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Asegurar que exista el estado de fondo global
+            if (typeof backgroundState === 'undefined') {
+                window.backgroundState = { type: 'color', color: '#ffffff' };
+            }
+
+            backgroundState = {
+                type: 'gradient',
+                gradientType: gradientType,
+                x1, y1, x2, y2,
+                radius,
+                color1: currentColor,
+                color2: currentColor2
+            };
+
+            // Guardar en historial y redibujar
+            saveShapesState();
+            redrawCanvasWithShapes();
+            showNotification('Gradiente aplicado como fondo');
         }
 
         function drawClone(pos) {
@@ -2011,6 +2554,13 @@
             const x = Math.floor(pos.x);
             const y = Math.floor(pos.y);
             
+            // Capturar estado actual del canvas antes del fill
+            const beforeCanvas = document.createElement('canvas');
+            beforeCanvas.width = canvas.width;
+            beforeCanvas.height = canvas.height;
+            const beforeCtx = beforeCanvas.getContext('2d');
+            beforeCtx.drawImage(canvas, 0, 0);
+            
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const targetColor = getPixelColor(imageData, x, y);
             const fillColor = hexToRgb(currentColor);
@@ -2040,8 +2590,36 @@
                 stack.push([currentX, currentY - 1]);
             }
             
-            ctx.putImageData(imageData, 0, 0);
-            saveState();
+            // Crear canvas temporal con el resultado del fill
+            const fillCanvas = document.createElement('canvas');
+            fillCanvas.width = canvas.width;
+            fillCanvas.height = canvas.height;
+            const fillCtx = fillCanvas.getContext('2d');
+            fillCtx.putImageData(imageData, 0, 0);
+            
+            // Convertir a base64 para persistencia
+            const imageDataURL = fillCanvas.toDataURL('image/png');
+            
+            // Guardar como figura de tipo imagen para que persista en redraw
+            const img = new Image();
+            img.onload = function() {
+                saveShapesState();
+                shapes.push({
+                    type: 'image',
+                    x: 0,
+                    y: 0,
+                    width: canvas.width,
+                    height: canvas.height,
+                    image: img,
+                    imageData: imageDataURL, // Guardar base64 para persistencia
+                    selected: false,
+                    rotation: 0
+                });
+                redrawCanvasWithShapes();
+                saveState();
+                showNotification('Área rellenada');
+            };
+            img.src = imageDataURL;
         }
 
         function getPixelColor(imageData, x, y) {
@@ -2063,9 +2641,10 @@
         }
 
         function colorsMatch(c1, c2) {
-            return Math.abs(c1.r - c2.r) < 10 && 
-                   Math.abs(c1.g - c2.g) < 10 && 
-                   Math.abs(c1.b - c2.b) < 10;
+            const tol = Math.max(0, Number(fillTolerance) || 0);
+            return Math.abs(c1.r - c2.r) <= tol && 
+                   Math.abs(c1.g - c2.g) <= tol && 
+                   Math.abs(c1.b - c2.b) <= tol;
         }
 
         function hexToRgb(hex) {
@@ -2078,6 +2657,8 @@
         }
 
         function drawSelection(start, end) {
+            if (!start || !end) return;
+            
             const x = Math.min(start.x, end.x);
             const y = Math.min(start.y, end.y);
             const width = Math.abs(end.x - start.x);
@@ -2091,33 +2672,272 @@
             ctx.restore();
         }
 
+        // ============ SISTEMA DE SELECCIÓN MEJORADO ============
+
+        function selectAll() {
+            activeSelection = {
+                x: 0,
+                y: 0,
+                width: canvas.width,
+                height: canvas.height
+            };
+            
+            // Capturar imagen de la selección
+            captureSelection();
+            
+            selectionStart = {x: 0, y: 0};
+            selectionEnd = {x: canvas.width, y: canvas.height};
+            
+            redrawCanvasWithShapes();
+            drawActiveSelection();
+            showNotification('Todo seleccionado (Ctrl+C para copiar, Supr para eliminar)', 'success');
+        }
+
+        function invertSelection() {
+            if (!activeSelection) {
+                showNotification('No hay selección activa', 'warning');
+                return;
+            }
+            
+            // Por ahora, simplemente notificamos que la inversión está activa
+            // Una implementación completa requeriría un sistema de regiones complejas
+            showNotification('Inversión de selección activada', 'info');
+            
+            // Implementación básica: seleccionar todo excepto la región actual
+            // Esto es más complejo y requiere un canvas de máscara
+        }
+
+        function deleteSelection() {
+            if (!activeSelection) {
+                showNotification('No hay selección activa', 'warning');
+                return;
+            }
+            
+            saveShapesState(); // Guardar para undo
+            
+            // Borrar el área seleccionada del canvas
+            const bgColor = backgroundState && backgroundState.color ? backgroundState.color : '#ffffff';
+            
+            if (backgroundState && backgroundState.type === 'transparent') {
+                ctx.clearRect(activeSelection.x, activeSelection.y, activeSelection.width, activeSelection.height);
+            } else {
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(activeSelection.x, activeSelection.y, activeSelection.width, activeSelection.height);
+            }
+            
+            // Convertir el canvas a una imagen y agregarlo a la capa
+            const img = new Image();
+            img.onload = function() {
+                shapes.push({
+                    type: 'image',
+                    x: 0,
+                    y: 0,
+                    width: canvas.width,
+                    height: canvas.height,
+                    image: img,
+                    imageData: canvas.toDataURL('image/png'),
+                    selected: false
+                });
+                
+                clearSelection();
+                redrawCanvasWithShapes();
+                showNotification('Selección eliminada', 'success');
+            };
+            img.src = canvas.toDataURL();
+        }
+
+        function clearSelection() {
+            activeSelection = null;
+            selectionStart = null;
+            selectionEnd = null;
+            selectionImageData = null;
+            freeformPoints = [];
+            isMovingSelection = false;
+            redrawCanvasWithShapes();
+        }
+
+        function toggleTransparentSelection() {
+            transparentSelection = !transparentSelection;
+            const indicator = document.getElementById('transparentSelectionIndicator');
+            if (indicator) {
+                indicator.textContent = transparentSelection ? '☑' : '☐';
+            }
+            showNotification(`Selección transparente ${transparentSelection ? 'activada' : 'desactivada'}`, 'info');
+        }
+
+        function captureSelection() {
+            if (!activeSelection) return;
+            
+            // Guardar posición original
+            selectionOriginalX = activeSelection.x;
+            selectionOriginalY = activeSelection.y;
+            selectionMoved = false;
+            
+            // Guardar el canvas completo antes de hacer cambios
+            canvasBeforeSelection = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Capturar los datos de imagen de la selección
+            selectionImageData = ctx.getImageData(
+                activeSelection.x, 
+                activeSelection.y, 
+                activeSelection.width, 
+                activeSelection.height
+            );
+        }
+
+        function isPointInSelection(x, y) {
+            if (!activeSelection) return false;
+            return x >= activeSelection.x && 
+                   x <= activeSelection.x + activeSelection.width &&
+                   y >= activeSelection.y && 
+                   y <= activeSelection.y + activeSelection.height;
+        }
+
+        // Dibuja la selección flotante (solo imagen, sin marco) durante el movimiento
+        function drawFloatingSelection() {
+            if (!activeSelection || !selectionImageData) return;
+            
+            ctx.save();
+            
+            // Dibujar solo la imagen flotante
+            ctx.putImageData(selectionImageData, activeSelection.x, activeSelection.y);
+            
+            // Dibujar borde simple (no animado) durante el movimiento
+            ctx.strokeStyle = '#14FFEC';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(
+                activeSelection.x, 
+                activeSelection.y, 
+                activeSelection.width, 
+                activeSelection.height
+            );
+            
+            ctx.restore();
+        }
+
+        // Dibuja la selección activa con marco animado (cuando NO se está moviendo)
+        function drawActiveSelection() {
+            if (!activeSelection) return;
+            
+            ctx.save();
+            
+            // Dibujar borde animado solo si NO se está moviendo
+            ctx.strokeStyle = '#14FFEC';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 4]);
+            
+            // Animar el borde de selección
+            const dashOffset = (Date.now() / 50) % 12;
+            ctx.lineDashOffset = -dashOffset;
+            
+            ctx.strokeRect(
+                activeSelection.x, 
+                activeSelection.y, 
+                activeSelection.width, 
+                activeSelection.height
+            );
+            
+            // Dibujar manijas de esquina
+            const handleSize = 6;
+            ctx.fillStyle = '#14FFEC';
+            ctx.setLineDash([]);
+            
+            const corners = [
+                {x: activeSelection.x, y: activeSelection.y}, // Superior izquierda
+                {x: activeSelection.x + activeSelection.width, y: activeSelection.y}, // Superior derecha
+                {x: activeSelection.x, y: activeSelection.y + activeSelection.height}, // Inferior izquierda
+                {x: activeSelection.x + activeSelection.width, y: activeSelection.y + activeSelection.height} // Inferior derecha
+            ];
+            
+            corners.forEach(corner => {
+                ctx.fillRect(corner.x - handleSize/2, corner.y - handleSize/2, handleSize, handleSize);
+            });
+            
+            ctx.restore();
+        }
+
+        function drawFreeformSelection() {
+            if (freeformPoints.length < 2) return;
+            
+            ctx.save();
+            ctx.strokeStyle = '#14FFEC';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            ctx.beginPath();
+            ctx.moveTo(freeformPoints[0].x, freeformPoints[0].y);
+            
+            for (let i = 1; i < freeformPoints.length; i++) {
+                ctx.lineTo(freeformPoints[i].x, freeformPoints[i].y);
+            }
+            
+            // Cerrar el path si hay suficientes puntos
+            if (freeformPoints.length > 2) {
+                ctx.closePath();
+            }
+            
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function finalizeFreeformSelection() {
+            if (freeformPoints.length < 3) {
+                showNotification('Dibuja un área más grande', 'warning');
+                freeformPoints = [];
+                return;
+            }
+            
+            // Calcular bounding box
+            let minX = Infinity, minY = Infinity;
+            let maxX = -Infinity, maxY = -Infinity;
+            
+            freeformPoints.forEach(point => {
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            });
+            
+            activeSelection = {
+                x: minX,
+                y: minY,
+                width: maxX - minX,
+                height: maxY - minY,
+                freeform: true,
+                points: [...freeformPoints]
+            };
+            
+            captureSelection();
+            redrawCanvasWithShapes();
+            drawActiveSelection();
+            
+            showNotification('Selección de forma libre creada', 'success');
+            freeformPoints = [];
+        }
+
         function finishShape() {
             // Función para finalizar formas complejas como polígonos
-            if (currentTool === 'polygon' && points.length > 2) {
-                ctx.save();
-                ctx.strokeStyle = currentColor;
-                ctx.lineWidth = brushSize;
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x, points[i].y);
-                }
-                ctx.closePath();
-                ctx.stroke();
-                
+            if (currentTool === 'polygon' && polygonModeActive && polygonPoints.length > 2) {
                 // Guardar la forma
                 shapes.push({
                     type: 'polygon',
-                    points: [...points],
+                    points: [...polygonPoints],
                     color: currentColor,
                     lineWidth: brushSize,
                     selected: false,
                     rotation: 0
                 });
-                
-                points = [];
+                polygonPoints = [];
+                polygonModeActive = false;
                 redrawCanvasWithShapes();
                 saveState();
+            }
+        }
+
+        function handleCanvasDoubleClick(e) {
+            if (currentTool === 'polygon' && polygonModeActive && polygonPoints.length > 2) {
+                finishShape();
             }
         }
 
@@ -2478,6 +3298,23 @@
                 case 'star':
                     drawStar(shape.startX, shape.startY, shape.endX, shape.endY, 0, style);
                     break;
+                case 'curve':
+                    // Soporte para curvas cuadráticas y cúbicas
+                    ctx.beginPath();
+                    ctx.moveTo(shape.startX, shape.startY);
+                    if (shape.cp1x !== undefined && shape.cp1y !== undefined && shape.cp2x !== undefined && shape.cp2y !== undefined) {
+                        // Curva cúbica
+                        ctx.bezierCurveTo(shape.cp1x, shape.cp1y, shape.cp2x, shape.cp2y, shape.endX, shape.endY);
+                    } else if (shape.controlX !== undefined && shape.controlY !== undefined) {
+                        // Curva cuadrática
+                        ctx.quadraticCurveTo(shape.controlX, shape.controlY, shape.endX, shape.endY);
+                    } else {
+                        // Fallback: dibujar como línea si faltan controles
+                        ctx.lineTo(shape.endX, shape.endY);
+                    }
+                    if (style.fill) ctx.fill();
+                    ctx.stroke();
+                    break;
                 case 'brush':
                 case 'pencil':
                     if (shape.points && shape.points.length > 0) {
@@ -2581,7 +3418,11 @@
                     shapes: layer.shapes
                 })))),
                 currentLayer: currentLayer,
-                nextLayerId: nextLayerId
+                nextLayerId: nextLayerId,
+                // Guardar también el estado del fondo (color/gradiente)
+                background: (function(){
+                    try { return JSON.parse(JSON.stringify(backgroundState)); } catch(e) { return null; }
+                })()
             };
             
             shapesHistory.push(JSON.stringify(layersState));
@@ -2613,12 +3454,20 @@
                 
                 currentLayer = layersState.currentLayer;
                 nextLayerId = layersState.nextLayerId;
+                // Restaurar estado de fondo si está presente
+                if (typeof layersState.background !== 'undefined' && layersState.background !== null) {
+                    backgroundState = layersState.background;
+                }
                 shapes = [...layers[currentLayer].shapes];
                 
                 updateLayersList();
                 redrawCanvasWithShapes();
             }
         }
+
+        // Estado de fondo persistente (color/gradiente)
+        // Usar var con comprobación para evitar errores por redefinición si ya existe
+        var backgroundState = (typeof backgroundState !== 'undefined') ? backgroundState : { type: 'color', color: '#ffffff' };
 
         function redrawCanvasWithShapes() {
             // Guardar las figuras actuales en la capa activa
@@ -2629,9 +3478,42 @@
             // Limpiar el canvas completamente
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Establecer fondo blanco
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Dibujar fondo persistente (color, gradiente o transparente)
+            try {
+                if (backgroundState && backgroundState.type === 'transparent') {
+                    // Fondo transparente - dibujar patrón de cuadros para visualizar
+                    drawTransparencyPattern();
+                } else if (backgroundState && backgroundState.type === 'gradient') {
+                    let g;
+                    if (backgroundState.gradientType === 'linear') {
+                        g = ctx.createLinearGradient(backgroundState.x1, backgroundState.y1, backgroundState.x2, backgroundState.y2);
+                    } else if (backgroundState.gradientType === 'radial') {
+                        const r = backgroundState.radius || Math.sqrt(Math.pow((backgroundState.x2 || 0) - (backgroundState.x1 || 0), 2) + Math.pow((backgroundState.y2 || 0) - (backgroundState.y1 || 0), 2));
+                        g = ctx.createRadialGradient(backgroundState.x1, backgroundState.y1, 0, backgroundState.x1, backgroundState.y1, r);
+                    } else if (backgroundState.gradientType === 'conic' && ctx.createConicGradient) {
+                        g = ctx.createConicGradient(0, backgroundState.x1, backgroundState.y1);
+                    }
+                    if (g) {
+                        g.addColorStop(0, backgroundState.color1 || '#000000');
+                        g.addColorStop(1, backgroundState.color2 || '#ffffff');
+                        ctx.fillStyle = g;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    } else {
+                        // Fallback a blanco si no se pudo crear el gradiente
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+                } else {
+                    // Fondo de color sólido
+                    const bgColor = (backgroundState && backgroundState.color) ? backgroundState.color : '#ffffff';
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+            } catch (e) {
+                // En caso de error, usar blanco
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
             
             // Dibujar cuadrícula si está activada (directamente en el canvas)
             if (showGrid) {
@@ -2661,6 +3543,42 @@
             });
         }
 
+        // Función para dibujar patrón de transparencia (cuadros grises)
+        function drawTransparencyPattern() {
+            const squareSize = 10;
+            const color1 = '#ffffff';
+            const color2 = '#cccccc';
+            
+            for (let y = 0; y < canvas.height; y += squareSize) {
+                for (let x = 0; x < canvas.width; x += squareSize) {
+                    const isEven = (Math.floor(x / squareSize) + Math.floor(y / squareSize)) % 2 === 0;
+                    ctx.fillStyle = isEven ? color1 : color2;
+                    ctx.fillRect(x, y, squareSize, squareSize);
+                }
+            }
+        }
+
+        // Función para establecer fondo transparente
+        function setBackgroundTransparent() {
+            backgroundState = { type: 'transparent' };
+            saveShapesState();
+            redrawCanvasWithShapes();
+            showNotification('Fondo cambiado a transparente', 'success');
+        }
+
+        // Función para establecer color de fondo
+        function setBackgroundColor() {
+            const color = prompt('Ingresa el color de fondo (hexadecimal):', backgroundState.color || '#ffffff');
+            if (color && /^#[0-9A-F]{6}$/i.test(color)) {
+                backgroundState = { type: 'color', color: color };
+                saveShapesState();
+                redrawCanvasWithShapes();
+                showNotification(`Fondo cambiado a ${color}`, 'success');
+            } else if (color) {
+                showNotification('Color inválido. Usa formato hexadecimal (#RRGGBB)', 'error');
+            }
+        }
+
         function drawGridOnCanvas() {
             if (!showGrid) return;
             
@@ -2688,13 +3606,33 @@
             ctx.restore();
         }
 
-        function pickColor(pos) {
+        function pickColor(pos, event) {
             const imageData = ctx.getImageData(pos.x, pos.y, 1, 1);
             const data = imageData.data;
             const hex = '#' + ((1 << 24) + (data[0] << 16) + (data[1] << 8) + data[2]).toString(16).slice(1);
-            document.getElementById('colorPicker').value = hex;
-            updateColor();
-            showNotification('Color capturado: ' + hex);
+            if (event && event.altKey) {
+                // Alt: color secundario
+                document.getElementById('colorPicker2').value = hex;
+                updateColor2();
+                showNotification('Color secundario capturado: ' + hex);
+            } else {
+                document.getElementById('colorPicker').value = hex;
+                updateColor();
+                showNotification('Color capturado: ' + hex);
+            }
+        }
+
+        function setFillTolerance() {
+            const value = prompt('Tolerancia de relleno (0-100):', fillTolerance);
+            if (value !== null) {
+                const n = parseInt(value, 10);
+                if (!isNaN(n) && n >= 0 && n <= 100) {
+                    fillTolerance = n;
+                    showNotification(`Tolerancia de relleno: ${fillTolerance}`);
+                } else {
+                    showNotification('Valor inválido para tolerancia de relleno', 'warning');
+                }
+            }
         }
 
         // ==========================================
@@ -3009,22 +3947,76 @@
             }
         }
 
+        function openTextModal(shape) {
+            editingTextShape = shape;
+            const modal = document.getElementById('textModal');
+            const input = document.getElementById('textInput');
+            const fontSel = document.getElementById('fontFamily');
+            const sizeInp = document.getElementById('fontSize');
+            const bold = document.getElementById('boldText');
+            const italic = document.getElementById('italicText');
+            const alignSel = document.getElementById('textAlign');
+
+            if (shape) {
+                input.value = shape.text || '';
+                fontSel.value = shape.fontFamily || 'Arial';
+                sizeInp.value = shape.fontSize || 30;
+                bold.checked = !!shape.bold;
+                italic.checked = !!shape.italic;
+                alignSel.value = shape.align || 'left';
+                currentColor = shape.textColor || shape.color || currentColor;
+                document.getElementById('colorPicker').value = currentColor;
+            } else {
+                input.value = '';
+                fontSel.value = 'Arial';
+                sizeInp.value = 30;
+                bold.checked = false;
+                italic.checked = false;
+                alignSel.value = 'left';
+            }
+            modal.style.display = 'flex';
+        }
+
         function addText() {
             const text = document.getElementById('textInput').value;
-            const fontSize = document.getElementById('fontSize').value;
+            const fontSize = parseInt(document.getElementById('fontSize').value, 10);
             const fontFamily = document.getElementById('fontFamily').value;
-            const bold = document.getElementById('boldText').checked ? 'bold ' : '';
-            const italic = document.getElementById('italicText').checked ? 'italic ' : '';
+            const bold = document.getElementById('boldText').checked;
+            const italic = document.getElementById('italicText').checked;
+            const align = document.getElementById('textAlign').value;
             
-            if (text && textPosition) {
-                ctx.font = `${italic}${bold}${fontSize}px ${fontFamily}`;
-                ctx.fillStyle = currentColor;
-                ctx.globalAlpha = opacity;
-                ctx.fillText(text, textPosition.x, textPosition.y);
-                ctx.globalAlpha = 1.0;
-                saveState();
+            if (!text) { closeTextModal(); return; }
+            
+            saveShapesState();
+            if (editingTextShape) {
+                // Actualizar
+                editingTextShape.text = text;
+                editingTextShape.fontSize = fontSize;
+                editingTextShape.fontFamily = fontFamily;
+                editingTextShape.bold = bold;
+                editingTextShape.italic = italic;
+                editingTextShape.align = align;
+                editingTextShape.textColor = currentColor;
+            } else if (textPosition) {
+                // Crear figura de texto
+                shapes.push({
+                    type: 'text',
+                    x: textPosition.x,
+                    y: textPosition.y,
+                    text,
+                    fontSize,
+                    fontFamily,
+                    bold,
+                    italic,
+                    align,
+                    textColor: currentColor,
+                    selected: false,
+                    rotation: 0
+                });
             }
-            
+
+            redrawCanvasWithShapes();
+            saveState();
             closeTextModal();
         }
 
@@ -3032,6 +4024,7 @@
             document.getElementById('textModal').style.display = 'none';
             document.getElementById('textInput').value = '';
             textPosition = null;
+            editingTextShape = null;
         }
 
         // Filtros de imagen
@@ -3486,11 +4479,24 @@
         function handleWheel(e) {
             if (e.ctrlKey) {
                 e.preventDefault();
-                if (e.deltaY < 0) {
-                    zoomIn();
-                } else {
-                    zoomOut();
-                }
+                const area = document.getElementById('canvasArea');
+                const rect = canvas.getBoundingClientRect();
+                const areaRect = area.getBoundingClientRect();
+                const offsetX = e.clientX - rect.left;
+                const offsetY = e.clientY - rect.top;
+                const normX = offsetX / zoom;
+                const normY = offsetY / zoom;
+                const oldZoom = zoom;
+
+                if (e.deltaY < 0) zoomIn(); else zoomOut();
+
+                // Mantener el punto bajo el cursor tras el zoom
+                const newOffsetX = normX * zoom;
+                const newOffsetY = normY * zoom;
+                const targetScrollLeft = newOffsetX - (e.clientX - areaRect.left);
+                const targetScrollTop = newOffsetY - (e.clientY - areaRect.top);
+                area.scrollLeft = Math.max(0, targetScrollLeft);
+                area.scrollTop = Math.max(0, targetScrollTop);
             } else if (rightClickHeld) {
                 e.preventDefault();
                 
@@ -3903,6 +4909,120 @@
             }
         }
 
+        // Combinar capa actual con la inferior
+        function mergeLayerDown(index = currentLayer) {
+            if (index <= 0 || index >= layers.length) {
+                showNotification('No se puede combinar: debe haber una capa inferior', 'error');
+                return;
+            }
+            
+            const upperLayer = layers[index];
+            const lowerLayer = layers[index - 1];
+            
+            if (!upperLayer.visible && !lowerLayer.visible) {
+                showNotification('Al menos una de las capas debe estar visible', 'error');
+                return;
+            }
+            
+            saveShapesState(); // Guardar para undo
+            
+            // Combinar las figuras de la capa superior en la inferior
+            lowerLayer.shapes = [...lowerLayer.shapes, ...upperLayer.shapes];
+            
+            // Si la capa superior estaba visible y la inferior no, hacer visible la inferior
+            if (upperLayer.visible && !lowerLayer.visible) {
+                lowerLayer.visible = true;
+            }
+            
+            // Conservar la mayor opacidad
+            if (upperLayer.opacity > lowerLayer.opacity) {
+                lowerLayer.opacity = upperLayer.opacity;
+            }
+            
+            // Eliminar la capa superior
+            layers.splice(index, 1);
+            
+            // Ajustar la capa actual
+            if (currentLayer >= index) {
+                currentLayer = Math.max(0, currentLayer - 1);
+            }
+            
+            shapes = [...layers[currentLayer].shapes];
+            
+            showNotification(`Capa "${upperLayer.name}" combinada con "${lowerLayer.name}"`, 'success');
+            updateLayersList();
+            redrawCanvasWithShapes();
+        }
+
+        // Aplanar todas las capas en una sola
+        function flattenLayers() {
+            if (layers.length <= 1) {
+                showNotification('Solo hay una capa, no hay nada que aplanar', 'info');
+                return;
+            }
+            
+            if (!confirm('¿Aplanar todas las capas? Esta acción combinará todas las capas visibles en una sola y no se puede deshacer completamente.')) {
+                return;
+            }
+            
+            saveShapesState(); // Guardar para undo
+            
+            // Crear una nueva capa que contendrá todas las figuras
+            const flattenedLayer = {
+                id: nextLayerId++,
+                name: 'Aplanado',
+                visible: true,
+                opacity: 1.0,
+                shapes: [],
+                canvas: document.createElement('canvas'),
+                ctx: null
+            };
+            
+            flattenedLayer.canvas.width = canvas.width;
+            flattenedLayer.canvas.height = canvas.height;
+            flattenedLayer.ctx = flattenedLayer.canvas.getContext('2d');
+            
+            // Combinar todas las figuras de todas las capas visibles
+            for (let i = 0; i < layers.length; i++) {
+                const layer = layers[i];
+                if (layer.visible) {
+                    // Aplicar la opacidad de la capa a cada figura si es menor a 1
+                    if (layer.opacity < 1.0) {
+                        // Crear copias de las figuras con opacidad ajustada
+                        const adjustedShapes = layer.shapes.map(shape => {
+                            const newShape = {...shape};
+                            // Ajustar el color con la opacidad de la capa
+                            if (newShape.color) {
+                                const rgba = hexToRgba(newShape.color, layer.opacity);
+                                newShape.color = rgba;
+                            }
+                            return newShape;
+                        });
+                        flattenedLayer.shapes.push(...adjustedShapes);
+                    } else {
+                        flattenedLayer.shapes.push(...layer.shapes);
+                    }
+                }
+            }
+            
+            // Reemplazar todas las capas con la nueva capa aplanada
+            layers = [flattenedLayer];
+            currentLayer = 0;
+            shapes = [...flattenedLayer.shapes];
+            
+            showNotification(`${flattenedLayer.shapes.length} figuras combinadas en una sola capa`, 'success');
+            updateLayersList();
+            redrawCanvasWithShapes();
+        }
+
+        // Función auxiliar para convertir hex a rgba
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
         function updateLayersList() {
             const layersList = document.getElementById('layersList');
             if (!layersList) return;
@@ -3916,9 +5036,22 @@
                 layerDiv.className = `layer ${i === currentLayer ? 'active' : ''}`;
                 layerDiv.onclick = () => selectLayer(i);
                 
+                // Hacer las capas arrastrables
+                layerDiv.draggable = true;
+                layerDiv.dataset.layerIndex = i;
+                
+                // Eventos de drag & drop
+                layerDiv.ondragstart = handleLayerDragStart;
+                layerDiv.ondragover = handleLayerDragOver;
+                layerDiv.ondrop = handleLayerDrop;
+                layerDiv.ondragend = handleLayerDragEnd;
+                layerDiv.ondragenter = handleLayerDragEnter;
+                layerDiv.ondragleave = handleLayerDragLeave;
+                
                 layerDiv.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                            <span style="cursor: grab; color: #888;">☰</span>
                             <button onclick="event.stopPropagation(); toggleLayerVisibility(${i})" 
                                     style="background: none; border: none; color: ${layer.visible ? '#14FFEC' : '#666'}; font-size: 14px; cursor: pointer;">
                                 ${layer.visible ? '👁' : '🙈'}
@@ -3949,6 +5082,88 @@
             }
         }
 
+        // Variables globales para drag & drop de capas
+        let draggedLayerIndex = null;
+        let dragOverLayerIndex = null;
+
+        function handleLayerDragStart(e) {
+            draggedLayerIndex = parseInt(e.currentTarget.dataset.layerIndex);
+            e.currentTarget.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+        }
+
+        function handleLayerDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleLayerDragEnter(e) {
+            const targetIndex = parseInt(e.currentTarget.dataset.layerIndex);
+            if (targetIndex !== draggedLayerIndex) {
+                e.currentTarget.style.borderTop = '2px solid #14FFEC';
+            }
+        }
+
+        function handleLayerDragLeave(e) {
+            e.currentTarget.style.borderTop = '';
+        }
+
+        function handleLayerDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            e.preventDefault();
+            
+            const targetIndex = parseInt(e.currentTarget.dataset.layerIndex);
+            
+            if (draggedLayerIndex !== null && targetIndex !== draggedLayerIndex) {
+                // Reordenar capas
+                const draggedLayer = layers[draggedLayerIndex];
+                
+                // Remover la capa arrastrada
+                layers.splice(draggedLayerIndex, 1);
+                
+                // Insertar en la nueva posición
+                // Ajustar el índice si es necesario
+                let newIndex = targetIndex;
+                if (draggedLayerIndex < targetIndex) {
+                    newIndex--;
+                }
+                layers.splice(newIndex, 0, draggedLayer);
+                
+                // Actualizar currentLayer si es necesario
+                if (currentLayer === draggedLayerIndex) {
+                    currentLayer = newIndex;
+                } else if (draggedLayerIndex < currentLayer && newIndex >= currentLayer) {
+                    currentLayer--;
+                } else if (draggedLayerIndex > currentLayer && newIndex <= currentLayer) {
+                    currentLayer++;
+                }
+                
+                updateLayersList();
+                redrawCanvasWithShapes();
+                showNotification('Capa reordenada', 'success');
+            }
+            
+            e.currentTarget.style.borderTop = '';
+            return false;
+        }
+
+        function handleLayerDragEnd(e) {
+            e.currentTarget.style.opacity = '1';
+            draggedLayerIndex = null;
+            
+            // Limpiar bordes de todos los elementos
+            const allLayers = document.querySelectorAll('.layer');
+            allLayers.forEach(layer => {
+                layer.style.borderTop = '';
+            });
+        }
+
         function renameLayerPrompt(index) {
             const currentName = layers[index].name;
             const newName = prompt('Nuevo nombre para la capa:', currentName);
@@ -3960,8 +5175,8 @@
         // Canvas operations
         function newCanvas() {
             if (confirm('¿Crear un nuevo canvas? Se perderá el trabajo actual.')) {
-                ctx.fillStyle = 'white';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                backgroundState = { type: 'color', color: '#ffffff' };
+                redrawCanvasWithShapes();
                 shapes = []; // Limpiar figuras guardadas
                 shapesHistory = [];
                 shapesHistoryStep = -1;
@@ -3978,8 +5193,8 @@
 
         function clearCanvas() {
             if (confirm('¿Estás seguro de que quieres limpiar el canvas?')) {
-                ctx.fillStyle = 'white';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                backgroundState = { type: 'color', color: '#ffffff' };
+                redrawCanvasWithShapes();
                 shapes = []; // Limpiar también las figuras guardadas
                 shapesHistory = [];
                 shapesHistoryStep = -1;
@@ -3993,19 +5208,86 @@
         }
 
         function saveImage() {
-            const link = document.createElement('a');
-            link.download = 'paint-pro-' + Date.now() + '.png';
-            link.href = canvas.toDataURL();
-            link.click();
-            showNotification('Imagen guardada como PNG');
+            // Exportar la composición final de todas las capas visibles
+            // Si el fondo es transparente, crear un canvas temporal sin el patrón de cuadros
+            if (backgroundState && backgroundState.type === 'transparent') {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Dibujar todas las capas visibles sin fondo
+                layers.forEach((layer, layerIndex) => {
+                    if (layer.visible && layer.shapes) {
+                        const originalGlobalAlpha = tempCtx.globalAlpha;
+                        tempCtx.globalAlpha = layer.opacity;
+                        
+                        layer.shapes.forEach(shape => {
+                            const savedCtx = ctx;
+                            ctx = tempCtx;
+                            drawShapeWithSelection({ ...shape, selected: false });
+                            ctx = savedCtx;
+                        });
+                        
+                        tempCtx.globalAlpha = originalGlobalAlpha;
+                    }
+                });
+                
+                const link = document.createElement('a');
+                link.download = 'paint-pro-' + Date.now() + '.png';
+                link.href = tempCanvas.toDataURL('image/png');
+                link.click();
+                showNotification('Imagen PNG exportada con transparencia', 'success');
+            } else {
+                // Exportar normalmente si tiene fondo
+                const link = document.createElement('a');
+                link.download = 'paint-pro-' + Date.now() + '.png';
+                link.href = canvas.toDataURL();
+                link.click();
+                showNotification('Imagen exportada (todas las capas visibles combinadas)');
+            }
         }
 
         function saveAsJPEG() {
+            // Exportar la composición final como JPEG
             const link = document.createElement('a');
             link.download = 'paint-pro-' + Date.now() + '.jpg';
             link.href = canvas.toDataURL('image/jpeg', 0.9);
             link.click();
-            showNotification('Imagen guardada como JPEG');
+            showNotification('Imagen exportada como JPEG (todas las capas visibles combinadas)');
+        }
+        
+        function exportCurrentLayerOnly() {
+            // Exportar solo la capa activa como imagen
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Dibujar fondo blanco
+            tempCtx.fillStyle = 'white';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            
+            // Dibujar solo las figuras de la capa actual
+            const currentLayerShapes = layers[currentLayer].shapes || [];
+            tempCtx.globalAlpha = layers[currentLayer].opacity;
+            currentLayerShapes.forEach(shape => {
+                drawShapeOnContext(tempCtx, shape);
+            });
+            
+            const link = document.createElement('a');
+            link.download = `${layers[currentLayer].name}-${Date.now()}.png`;
+            link.href = tempCanvas.toDataURL();
+            link.click();
+            showNotification(`Capa "${layers[currentLayer].name}" exportada`);
+        }
+        
+        function drawShapeOnContext(context, shape) {
+            // Función auxiliar para dibujar una figura en un contexto específico
+            const savedCtx = ctx;
+            ctx = context;
+            drawShapeWithSelection({ ...shape, selected: false });
+            ctx = savedCtx;
         }
 
         function loadImage() {
@@ -4067,10 +5349,12 @@
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             
-            return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY
-            };
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            // Limitar a los bordes del canvas
+            const clampedX = Math.max(0, Math.min(canvas.width - 1, x));
+            const clampedY = Math.max(0, Math.min(canvas.height - 1, y));
+            return { x: clampedX, y: clampedY };
         }
 
         function updateStatus() {
@@ -4216,8 +5500,83 @@ Notas:
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            // No capturar atajos mientras se escribe en inputs/select/textarea o cuando el modal de texto está abierto
+            const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toLowerCase() : '';
+            const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || (document.activeElement && document.activeElement.isContentEditable);
+            const tm0 = document.getElementById('textModal');
+            const isTextModalOpen = tm0 && tm0.style.display === 'flex';
+            if (isTyping || isTextModalOpen) {
+                // Permitir cerrar con ESC aunque se esté escribiendo
+                if (e.key === 'Escape') {
+                    const tm = document.getElementById('textModal');
+                    if (tm && tm.style.display === 'flex') closeTextModal();
+                }
+                return;
+            }
+
+            // Finalización/cancelación de interacción de POLÍGONO y CURVA
+            if (e.key === 'Enter') {
+                if (currentTool === 'polygon' && polygonModeActive) {
+                    e.preventDefault();
+                    finishShape();
+                    return;
+                }
+                if (currentTool === 'freeformSelect' && freeformPoints.length > 0) {
+                    e.preventDefault();
+                    finalizeFreeformSelection();
+                    return;
+                }
+            }
+            if (e.key === 'Escape') {
+                // Cancelar selección activa
+                if (activeSelection) {
+                    e.preventDefault();
+                    clearSelection();
+                    showNotification('Selección cancelada');
+                    return;
+                }
+                if (currentTool === 'polygon' && polygonModeActive) {
+                    e.preventDefault();
+                    polygonPoints = [];
+                    polygonModeActive = false;
+                    redrawCanvasWithShapes();
+                    showNotification('Polígono cancelado');
+                    return;
+                }
+                if (currentTool === 'curve' && curvePhase > 0) {
+                    e.preventDefault();
+                    curvePhase = 0;
+                    curveStart = null;
+                    curveEnd = null;
+                    curveCp1 = null;
+                    curveCp2 = null;
+                    isDrawing = false;
+                    redrawCanvasWithShapes();
+                    showNotification('Curva cancelada');
+                    return;
+                }
+                if (currentTool === 'freeformSelect' && freeformPoints.length > 0) {
+                    e.preventDefault();
+                    freeformPoints = [];
+                    redrawCanvasWithShapes();
+                    showNotification('Selección libre cancelada');
+                    return;
+                }
+            }
+            // Tecla Suprimir para eliminar selección
+            if (e.key === 'Delete' || e.key === 'Supr') {
+                if (activeSelection) {
+                    e.preventDefault();
+                    deleteSelection();
+                    return;
+                }
+            }
             if (e.ctrlKey) {
                 switch(e.key.toLowerCase()) {
+                    case 'a':
+                        e.preventDefault();
+                        selectAll();
+                        break;
                     case 'n':
                         e.preventDefault();
                         newCanvas();
@@ -4288,12 +5647,21 @@ Notas:
                         setTool('text');
                         break;
                     case 'm':
-                        setTool('select');
+                        if (e.shiftKey) {
+                            setTool('freeformSelect');
+                        } else {
+                            setTool('select');
+                        }
                         break;
                     case 'v':
                         setTool('move');
                         break;
                 }
+            }
+            // Cerrar modal con ESC (si no se interceptó antes)
+            if (e.key === 'Escape') {
+                const tm = document.getElementById('textModal');
+                if (tm && tm.style.display === 'flex') closeTextModal();
             }
         });
 
@@ -4311,7 +5679,10 @@ Notas:
                     canvas: {
                         width: canvas.width,
                         height: canvas.height,
-                        backgroundColor: '#ffffff'
+                        backgroundColor: '#ffffff',
+                        background: (function(){
+                            try { return JSON.parse(JSON.stringify(backgroundState)); } catch(e) { return null; }
+                        })()
                     },
                     layers: layers.map(layer => ({
                         id: layer.id,
@@ -4324,13 +5695,41 @@ Notas:
                             
                             // Si es una imagen, convertir a base64
                             if (shape.type === 'image' && shape.image) {
-                                const tempCanvas = document.createElement('canvas');
-                                const tempCtx = tempCanvas.getContext('2d');
-                                tempCanvas.width = shape.width;
-                                tempCanvas.height = shape.height;
-                                tempCtx.drawImage(shape.image, 0, 0, shape.width, shape.height);
-                                serializedShape.imageData = tempCanvas.toDataURL();
-                                delete serializedShape.image; // Remover la referencia del objeto Image
+                                try {
+                                    const tempCanvas = document.createElement('canvas');
+                                    const tempCtx = tempCanvas.getContext('2d');
+                                    
+                                    // Usar las dimensiones de la imagen o del shape
+                                    const imgWidth = shape.width || shape.image.width || shape.image.naturalWidth || 100;
+                                    const imgHeight = shape.height || shape.image.height || shape.image.naturalHeight || 100;
+                                    
+                                    tempCanvas.width = imgWidth;
+                                    tempCanvas.height = imgHeight;
+                                    
+                                    // Verificar que la imagen sea válida antes de dibujar
+                                    if (shape.image.complete && shape.image.naturalWidth > 0) {
+                                        tempCtx.drawImage(shape.image, 0, 0, imgWidth, imgHeight);
+                                        serializedShape.imageData = tempCanvas.toDataURL();
+                                    } else if (shape.imageData) {
+                                        // Si ya tiene imageData guardado, usarlo
+                                        serializedShape.imageData = shape.imageData;
+                                    } else {
+                                        console.warn('Imagen no válida, se omitirá en el guardado');
+                                    }
+                                    
+                                    // Guardar dimensiones
+                                    serializedShape.width = imgWidth;
+                                    serializedShape.height = imgHeight;
+                                    
+                                    delete serializedShape.image; // Remover la referencia del objeto Image
+                                } catch (error) {
+                                    console.error('Error serializando imagen:', error);
+                                    // Si hay error, intentar preservar imageData existente
+                                    if (shape.imageData) {
+                                        serializedShape.imageData = shape.imageData;
+                                    }
+                                    delete serializedShape.image;
+                                }
                             }
                             
                             return serializedShape;
@@ -4393,6 +5792,12 @@ Notas:
                         if (projectData.canvas) {
                             canvas.width = projectData.canvas.width || 800;
                             canvas.height = projectData.canvas.height || 600;
+                            // Restaurar fondo si existe
+                            if (projectData.canvas.background) {
+                                backgroundState = projectData.canvas.background;
+                            } else if (projectData.canvas.backgroundColor) {
+                                backgroundState = { type: 'color', color: projectData.canvas.backgroundColor };
+                            }
                         }
                         
                         // Restaurar capas
@@ -4519,6 +5924,8 @@ Notas:
                                 currentColor2: currentColor2
                             }
                         };
+                        // Persistir fondo también en autoguardado
+                        try { projectData.canvas.background = JSON.parse(JSON.stringify(backgroundState)); } catch(e) { /* ignore */ }
                         
                         localStorage.setItem('paintpro_autosave', JSON.stringify(projectData));
                         console.log('Autoguardado realizado');
@@ -4533,8 +5940,11 @@ Notas:
         function loadAutoSave() {
             try {
                 const autoSaveData = localStorage.getItem('paintpro_autosave');
-                if (autoSaveData) {
-                    const confirmed = confirm('Se detectó un autoguardado. ¿Deseas recuperar tu trabajo anterior?');
+                // Solo mostrar el diálogo si la última salida NO fue limpia (p.ej. cierre inesperado)
+                const lastExitClean = localStorage.getItem('paintpro_last_exit_clean') === 'true';
+
+                if (autoSaveData && !lastExitClean) {
+                    const confirmed = confirm('Se detectó un autoguardado de una sesión previa que no se cerró correctamente. ¿Deseas recuperar tu trabajo anterior?');
                     if (confirmed) {
                         const projectData = JSON.parse(autoSaveData);
                         
@@ -4542,6 +5952,11 @@ Notas:
                         if (projectData.canvas) {
                             canvas.width = projectData.canvas.width || 800;
                             canvas.height = projectData.canvas.height || 600;
+                            if (projectData.canvas.background) {
+                                backgroundState = projectData.canvas.background;
+                            } else if (projectData.canvas.backgroundColor) {
+                                backgroundState = { type: 'color', color: projectData.canvas.backgroundColor };
+                            }
                         }
                         
                         // Restaurar capas
@@ -4574,6 +5989,10 @@ Notas:
                         saveShapesState();
                         updateWindowTitle();
                         
+                        // Limpiar el autoguardado antiguo; se volverá a crear automáticamente
+                        // en esta sesión si el autoguardado está activo.
+                        try { localStorage.removeItem('paintpro_autosave'); } catch(e) { /* ignore */ }
+
                         showNotification('Trabajo anterior recuperado del autoguardado', 'success');
                     } else {
                         // Si no quiere recuperar, limpiar el autoguardado
@@ -4606,30 +6025,79 @@ Notas:
 
         function copyCanvasToClipboard() {
             try {
-                // Crear un canvas temporal con el contenido actual
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                
-                // Copiar el contenido del canvas principal
-                tempCtx.drawImage(canvas, 0, 0);
-                
-                // Convertir a blob y copiar al portapapeles
-                tempCanvas.toBlob(async (blob) => {
-                    try {
-                        await navigator.clipboard.write([
-                            new ClipboardItem({ 'image/png': blob })
-                        ]);
-                        showNotification('Canvas copiado al portapapeles', 'success');
-                    } catch (err) {
-                        console.error('Error copiando al portapapeles:', err);
-                        showNotification('Error al copiar al portapapeles', 'error');
+                // Si hay una selección activa, copiar solo esa área
+                if (activeSelection && selectionImageData) {
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = activeSelection.width;
+                    tempCanvas.height = activeSelection.height;
+                    
+                    // Aplicar selección transparente si está activada
+                    if (transparentSelection) {
+                        // Copiar imageData pero hacer transparente el blanco
+                        const imgData = ctx.getImageData(
+                            activeSelection.x,
+                            activeSelection.y,
+                            activeSelection.width,
+                            activeSelection.height
+                        );
+                        
+                        // Hacer transparente el color blanco
+                        for (let i = 0; i < imgData.data.length; i += 4) {
+                            const r = imgData.data[i];
+                            const g = imgData.data[i + 1];
+                            const b = imgData.data[i + 2];
+                            
+                            // Si es blanco (o muy cercano), hacerlo transparente
+                            if (r > 250 && g > 250 && b > 250) {
+                                imgData.data[i + 3] = 0; // Alpha = 0
+                            }
+                        }
+                        
+                        tempCtx.putImageData(imgData, 0, 0);
+                    } else {
+                        // Copiar normalmente
+                        tempCtx.putImageData(selectionImageData, 0, 0);
                     }
-                });
+                    
+                    // Convertir a blob y copiar al portapapeles
+                    tempCanvas.toBlob(async (blob) => {
+                        try {
+                            await navigator.clipboard.write([
+                                new ClipboardItem({ 'image/png': blob })
+                            ]);
+                            showNotification('Selección copiada al portapapeles', 'success');
+                        } catch (err) {
+                            console.error('Error copiando al portapapeles:', err);
+                            showNotification('Error al copiar al portapapeles', 'error');
+                        }
+                    });
+                } else {
+                    // Si no hay selección, copiar todo el canvas
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = canvas.width;
+                    tempCanvas.height = canvas.height;
+                    
+                    // Copiar el contenido del canvas principal
+                    tempCtx.drawImage(canvas, 0, 0);
+                    
+                    // Convertir a blob y copiar al portapapeles
+                    tempCanvas.toBlob(async (blob) => {
+                        try {
+                            await navigator.clipboard.write([
+                                new ClipboardItem({ 'image/png': blob })
+                            ]);
+                            showNotification('Canvas copiado al portapapeles', 'success');
+                        } catch (err) {
+                            console.error('Error copiando al portapapeles:', err);
+                            showNotification('Error al copiar al portapapeles', 'error');
+                        }
+                    });
+                }
             } catch (err) {
                 console.error('Error en copyCanvasToClipboard:', err);
-                showNotification('Error al copiar canvas', 'error');
+                showNotification('Error al copiar', 'error');
             }
         }
 
@@ -4642,7 +6110,15 @@ Notas:
                                 clipboardItem.getType(type).then(blob => {
                                     const img = new Image();
                                     img.onload = function() {
-                                        // Crear una nueva figura de imagen
+                                        // Convertir la imagen a base64 inmediatamente
+                                        const tempCanvas = document.createElement('canvas');
+                                        const tempCtx = tempCanvas.getContext('2d');
+                                        tempCanvas.width = img.width;
+                                        tempCanvas.height = img.height;
+                                        tempCtx.drawImage(img, 0, 0);
+                                        const imageData = tempCanvas.toDataURL('image/png');
+                                        
+                                        // Crear una nueva figura de imagen con imageData guardado
                                         const imageShape = {
                                             type: 'image',
                                             x: 50,
@@ -4650,6 +6126,7 @@ Notas:
                                             width: img.width,
                                             height: img.height,
                                             image: img,
+                                            imageData: imageData, // Guardar base64 para persistencia
                                             selected: false
                                         };
                                         
@@ -4728,6 +6205,14 @@ Notas:
                     reader.onload = function(event) {
                         const img = new Image();
                         img.onload = function() {
+                            // Convertir la imagen a base64 inmediatamente
+                            const tempCanvas = document.createElement('canvas');
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCanvas.width = img.width;
+                            tempCanvas.height = img.height;
+                            tempCtx.drawImage(img, 0, 0);
+                            const imageData = tempCanvas.toDataURL('image/png');
+                            
                             // Crear una nueva figura de imagen
                             const imageShape = {
                                 type: 'image',
@@ -4736,6 +6221,7 @@ Notas:
                                 width: img.width,
                                 height: img.height,
                                 image: img,
+                                imageData: imageData, // Guardar base64 para persistencia
                                 selected: false
                             };
                             
